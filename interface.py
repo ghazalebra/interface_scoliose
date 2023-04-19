@@ -6,7 +6,6 @@ from kivy.core.window import Window
 from kivy.graphics import Color, Line, Ellipse
 from kivy.uix.button import Button
 import os
-import shutil
 import json
 import cv2
 import csv
@@ -251,7 +250,7 @@ class MyApp(Widget):
     def pos_marqueur(self, touch_pos):
         m_pos = [0,0]
         # im_dim = (600, 500, 3) = (height, width, channels)
-        if 0.02*self.width <= touch_pos[0] <= (0.378*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
+        if 0.02*self.width <= touch_pos[0] <= (702/1960*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
             m_pos[0] = (touch_pos[0]/self.width - 0.02)/(702/1960)*im_dim[1]
             m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
         # Détermine s'il y a un marqueur à effacer ou si on en ajoute un manquant
@@ -408,7 +407,8 @@ class MyApp(Widget):
 
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
-        if detection_eff == True and self.ids.button_analyze.state == 'down':
+        im_prob_nb = self.verif_nb()
+        if len(im_prob_nb) == 0 and self.ids.button_analyze.state == 'down':
             global analyse_eff
             analyse_eff = True
             self.coordo_xyz_marqueurs()
@@ -495,7 +495,7 @@ class MyApp(Widget):
         ax1.plot(xaxis, dict_metriques['angle_scap_prof'], label='Profondeur')
         ax1.scatter(min_metriques['angle_scap_prof'][0], min_metriques['angle_scap_prof'][1], marker='*', c='g')
         ax1.legend(fontsize=7)
-        ax1.set_title("Angle entre les scapulas", fontsize=9)
+        ax1.set_title("Angles entre les scapulas", fontsize=9)
         ax1.set_ylabel('Angle (degrés)', fontsize=9)
 
         ax2.plot(xaxis, dict_metriques['angle_rachis'])
