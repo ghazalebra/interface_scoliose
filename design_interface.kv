@@ -1,0 +1,280 @@
+<ToggleButton>
+    font_size: 15
+    background_normal:''
+    background_color:(24/255.0, 192/255.0, 214/255.0, 1)
+    valign: 'middle'
+    halign: 'center'
+
+<CheckBox>
+    color:(1,1,1,2)
+    size_hint: (.04, .06)
+
+<MyApp>
+    id: my_app
+    FloatLayout:
+        size: root.width, root.height
+        Label:
+            text:'Nouveau'
+            size_hint: (.04, .05)
+            pos_hint: {'x':.01, 'top':.99}
+        Label:
+            text:'Ouvrir'
+            halign:'left'
+            size_hint: (.03, .05)
+            pos_hint: {'x':.01, 'top':.94}
+        CheckBox:
+            id:check_new
+            pos_hint: {'x':.05, 'top':.99}
+        CheckBox:
+            id:check_open
+            pos_hint: {'x':.05, 'top':.94}
+        Label:
+            text:'Entrez le chemin vers le répertoire ou le fichier (.raw) :'
+            size_hint: (.28, .04)
+            pos_hint: {'x':.09, 'top':.99}
+        TextInput:
+            id: path_input
+            multiline: False
+            font_size: 12
+            on_text_validate: root.im_select()
+            size_hint: (.28, .04)
+            pos_hint: {'x':.09, 'top':.95}
+        Label:
+            id: label_ready
+            text:''
+            size_hint: (.38, .04)
+            pos_hint: {'x':.01, 'top':.9}
+        Image: #séquence d'images (.jpg)
+            id: image_show
+            size_hint: ((702/1960), .78)
+            background_color:(0,0,0,0)
+            pos_hint: {'x':.02, 'top':.85}
+            allow_stretch: False
+            on_touch_down: root.pos_marqueur(args[1].pos)
+        Label: #indicateur (0,0) de l'image
+            id:origine
+            pos_hint: {'x':.02, 'top':.85}
+            size_hint: (.033, .02)
+            text: '(0, 0)'
+            font_size: 14
+            color: 1,1,1,1
+        Label:
+            id:width
+            pos_hint: {'x':.327, 'top':.85}
+            size_hint: (.033, .02)
+            text: '(500, 0)'
+            font_size: 14
+            color: 1,1,1,1
+        Label:
+            id:height
+            pos_hint: {'x':.022, 'top':.095}
+            size_hint: (.035, .02)
+            text: '(0,600)'
+            font_size: 14
+            color: 1,1,1,1
+        Slider:
+            id: slider
+            min: 1
+            max: 1
+            step: 1
+            orientation:'horizontal' #default horizontal
+            size_hint: (.38, .04)
+            pos_hint: {'x':.01, 'top':.06}
+            on_value: root.slider_pos(*args) # *args include name of the slider and position number
+        BoxLayout:
+            orientation:"vertical"
+            spacing:5
+            pos_hint:{'x':.39, 'top':.87}
+            size_hint:{.13, .56}
+            ToggleButton:
+                id: button_detect
+                text:"Détecter tous\nles marqueurs"
+                on_press: root.press_color()
+                on_press: root.detect_marqueurs()
+            ToggleButton:
+                id: button_showmarks
+                text:"Afficher les\n marqueurs"
+                on_press: root.press_color()
+                on_press: root.show_marqueurs()
+            ToggleButton:
+                id: button_verif_nb
+                text: "Vérifier le nombre\nde marqueurs"
+                on_press: root.press_color()
+                on_press: root.verif_nb()
+            Button:
+                id: button_interpolate
+                font_size: 15
+                background_normal:''
+                background_color:(24/255.0, 192/255.0, 214/255.0, 1)
+                valign: 'middle'
+                halign: 'center'
+                text: "Ajouter des marqueurs\npar interpolation"
+                on_press: root.press_color()
+                on_press: root.add_by_continuity()
+            ToggleButton:
+                id: button_verif_continuity
+                text: "Vérifier la continuité\ndes marqueurs"
+                on_press: root.press_color()
+                on_press: root.continuity()
+            ToggleButton:
+                id: button_graph_continuity
+                text: "Afficher les graphiques\nde continuité"
+                on_press: root.press_color()
+                on_press: root.graph_continuity()
+            ToggleButton:
+                id: button_analyze
+                text: "Confirmer et\nlancer l'analyse"
+                on_press: root.press_color()
+                on_press: root.analyse()
+        GridLayout:
+            cols:2
+            rows:6
+            orientation:'tb-lr'
+            size_hint:(.22, .24)
+            pos_hint:{'x':.53, 'top':.98}
+            cols_minimum:{0:.05, 1:.17}
+            canvas.before:
+                Color:
+                    rgba: (171/255.0, 222/255.0, 231/255.0, 1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            Label:
+                text: 'Marqueur'
+                color: (0,0,0,1)
+            Label:
+                text:'C7'
+                color: (0,0,0,1)
+            Label:
+                text:'G'
+                color: (0,0,0,1)
+            Label:
+                text:'D'
+                color: (0,0,0,1)
+            Label:
+                text:'T'
+                color: (0,0,0,1)
+            Label:
+                text:'L'
+                color: (0,0,0,1)
+            Label:
+                id: entete_coordos
+                text:'Position'
+                color: (0,0,0,1)
+            Label:
+                id:coordo_1
+                color: (0,0,0,1)
+            Label:
+                id:coordo_2
+                color: (0,0,0,1)
+            Label:
+                id:coordo_3
+                color: (0,0,0,1)
+            Label:
+                id:coordo_4
+                color: (0,0,0,1)
+            Label:
+                id:coordo_5
+                color: (0,0,0,1)
+        Label:
+            id: image_nb
+            text: 'Image no :'
+            font_size: 18
+            size_hint: (.07, .05)
+            pos_hint:{'x':.385, 'top':.06}
+        TextInput:
+            id: image_nb_input
+            multiline: False
+            text: ''
+            font_size: 15
+            size_hint: (.048, .045)
+            pos_hint:{'x':.455, 'top':.06}
+            on_text_validate: root.image_nb_input()
+        Label:
+            id: image_total
+            text: ''
+            font_size: 18
+            size_hint: (.03, .05)
+            pos_hint:{'x':.502, 'top':.06}
+        Label:
+            id: im_prob_nb
+            text: ''
+            font_size: 15
+            halign: 'left'
+            valign:'top'
+            size_hint: (.2, .2)
+            pos_hint:{'x':.55, 'top':.76}
+        Label:
+            id: rep_continuity
+            text: ''
+            font_size: 15
+            color: 1,0,0,1
+            halign: 'left'
+            size_hint: (.12, .1)
+            pos_hint: {'x':.39, 'top':.3}
+        BoxLayout:
+            id: graph
+            size_hint: (.47, .6)
+            pos_hint: {'x':.53, 'top':.6}
+            allow_strecth: True
+        Label:
+            text:'Infos à sauvegarder :'
+            fontsize: 18
+            halign: 'left'
+            size_hint: (.15, .1)
+            pos_hint: {'x':.83, 'top':.99}
+        Label:
+            text:'Positions corrigées'
+            fontsize: 15
+            size_hint: (.105, .1)
+            pos_hint: {'x':.82, 'top':.93}
+        Label:
+            text:'Métriques de symétrie'
+            fontsize: 15
+            size_hint: (.11, .1)
+            pos_hint: {'x':.82, 'top':.87}
+        Label:
+            text:'Graphiques des métriques'
+            fontsize: 15
+            size_hint: (.12, .1)
+            pos_hint: {'x':.82, 'top':.81}
+        CheckBox:
+            id:save_positions
+            pos_hint: {'x':.96, 'top':.91}
+        CheckBox:
+            id:save_metriques
+            pos_hint: {'x':.96, 'top':.85}
+        CheckBox:
+            id:save_graph
+            pos_hint: {'x':.96, 'top':.79}
+        ToggleButton:
+            id:save
+            text:'Sauvegarder'
+            pos_hint: {'x':.83, 'top':.73}
+            size_hint: (.13, .04)
+            on_press: root.to_save()
+        Label:
+            text: 'Meilleure symétrie atteinte'
+            fontsize: 15
+            halign:'left'
+            pos_hint:{'x':.41, 'top':.18}
+            size_hint:(.1, .02)
+        Label:
+            id:im_best
+            text: 'Image no'
+            fontsize: 18
+            halign:'left'
+            pos_hint:{'x':.4, 'top':.14}
+            size_hint:(.1, .02)
+        Label:
+            id:sym_best
+            text: 'Score :'
+            fontsize: 18
+            halign:'left'
+            pos_hint:{'x':.39, 'top':.1}
+            size_hint:(.1, .02)
+
+<Touch>:
+    BoxLayout:
+        size_hint: ((702/1960), .78)
+        pos_hint: {'x':.02, 'top':.85}
