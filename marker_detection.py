@@ -71,7 +71,7 @@ def annotate_video(save_path, video_path):
         if not ret:
             break
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        print(frame.shape)
+        # print(frame.shape)
         src_img = frame
         frame = preprocess(frame)
         key_points = detect_markers(frame)
@@ -82,8 +82,8 @@ def annotate_video(save_path, video_path):
         key_points_y = [key_points[j].pt[1] for j in range(len(key_points))]
         key_points_y.sort()
         key_points_x.sort()
-        print(key_points_x)
-        print(key_points_y)
+        # print(key_points_x)
+        # print(key_points_y)
         cv2.imwrite(save_path + 'frame%d.jpg' % i, src_img)
         cv2.imwrite(save_path + 'annotated_frame%d.jpg' % i, im_with_key_points)
         break

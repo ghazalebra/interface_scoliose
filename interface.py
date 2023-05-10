@@ -551,9 +551,7 @@ class MyApp(Widget):
         timer_debut_save = time.process_time_ns()
         analyse_eff = True
         if analyse_eff:
-            print('here')
             if self.ids.save_positions.state == 'down':
-                print('here')
                 if not 'landmarks' in os.listdir(path):
                     os.mkdir(path+'/landmarks', )
                 self.save_positions()
