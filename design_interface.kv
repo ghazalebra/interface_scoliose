@@ -24,21 +24,34 @@
             pos_hint: {'x':.01, 'top':.94}
         CheckBox:
             id:check_new
-            pos_hint: {'x':.05, 'top':.99}
+            pos_hint: {'x':.045, 'top':.99}
         CheckBox:
             id:check_open
-            pos_hint: {'x':.05, 'top':.94}
+            pos_hint: {'x':.045, 'top':.94}
         Label:
             text:'Entrez le chemin vers le répertoire ou le fichier (.raw) :'
             size_hint: (.28, .04)
-            pos_hint: {'x':.09, 'top':.99}
+            pos_hint: {'x':.08, 'top':.99}
         TextInput:
             id: path_input
             multiline: False
             font_size: 12
             on_text_validate: root.im_select()
             size_hint: (.28, .04)
-            pos_hint: {'x':.09, 'top':.95}
+            pos_hint: {'x':.08, 'top':.95}
+        Label:
+            text: 'Nombre de marqueurs :'
+            font_size: 15
+            size_hint: (.12, .05)
+            pos_hint:{'x':.38, 'top':.95}
+        TextInput:
+            id: marq_nb_input
+            text: ''
+            font_size: 15
+            size_hint: (.02, .045)
+            pos_hint:{'x':.51, 'top':.95}
+            multiline: False
+            on_text_validate: root.nb_marqueurs_input()
         Label:
             id: label_ready
             text:''
@@ -46,28 +59,30 @@
             pos_hint: {'x':.01, 'top':.9}
         Image: #séquence d'images (.jpg)
             id: image_show
-            size_hint: ((702/1960), .78)
+            size_hint: ((.78/(600/root.height)*(500/root.width)), .78)
             background_color:(0,0,0,0)
-            pos_hint: {'x':.02, 'top':.85}
-            allow_stretch: False
+            pos_hint: {'x':.03, 'top':.85}
+            allow_stretch: True
+            keep_ratio: False
             on_touch_down: root.pos_marqueur(args[1].pos)
+            on_touch_down: root.labelize_manual(args[1].pos)
         Label: #indicateur (0,0) de l'image
             id:origine
-            pos_hint: {'x':.02, 'top':.85}
+            pos_hint: {'x':.03, 'top':.85}
             size_hint: (.033, .02)
             text: '(0, 0)'
             font_size: 14
             color: 1,1,1,1
         Label:
             id:width
-            pos_hint: {'x':.327, 'top':.85}
+            pos_hint: {'x':.3262, 'top':.85}
             size_hint: (.033, .02)
             text: '(500, 0)'
             font_size: 14
             color: 1,1,1,1
         Label:
             id:height
-            pos_hint: {'x':.022, 'top':.095}
+            pos_hint: {'x':.03, 'top':.095}
             size_hint: (.035, .02)
             text: '(0,600)'
             font_size: 14
@@ -84,18 +99,17 @@
         BoxLayout:
             orientation:"vertical"
             spacing:5
-            pos_hint:{'x':.39, 'top':.87}
-            size_hint:{.13, .56}
-            ToggleButton:
-                id: button_detect
-                text:"Détecter tous\nles marqueurs"
-                on_press: root.press_color()
-                on_press: root.detect_marqueurs()
+            pos_hint:{'x':.38, 'top':.87}
+            size_hint:{.14, .58}
             ToggleButton:
                 id: button_showmarks
-                text:"Afficher les\n marqueurs"
+                text:"Afficher les\nmarqueurs"
                 on_press: root.press_color()
                 on_press: root.show_marqueurs()
+            ToggleButton:
+                id: labelize_manual
+                text:"Activer la\nlabellisation manuelle"
+                on_press: root.press_color()
             ToggleButton:
                 id: button_verif_nb
                 text: "Vérifier le nombre\nde marqueurs"
@@ -126,12 +140,28 @@
                 text: "Confirmer et\nlancer l'analyse"
                 on_press: root.press_color()
                 on_press: root.analyse()
+        Label:
+            text: 'Label :'
+            font_size: 15
+            size_hint: (.07, .05)
+            pos_hint:{'x':.39, 'top':.27}
+        TextInput:
+            id: label_input
+            text: ''
+            font_size: 15
+            size_hint: (.048, .045)
+            pos_hint:{'x':.46, 'top':.27}
+            multiline: False
+            on_text_validate: root.label_in()
+
         GridLayout:
+            id:grid
             cols:2
-            rows:6
-            orientation:'tb-lr'
-            size_hint:(.22, .24)
-            pos_hint:{'x':.53, 'top':.98}
+            rows:2
+            orientation:'lr-tb'
+            size_hint:(.22, .2)
+            pos_hint:{'x':.57, 'top':.98}
+            rows_minimum:{0:.04, 1:.16}
             cols_minimum:{0:.05, 1:.17}
             canvas.before:
                 Color:
@@ -140,46 +170,16 @@
                     size: self.size
                     pos: self.pos
             Label:
-                text: 'Marqueur'
-                color: (0,0,0,1)
-            Label:
-                text:'C7'
-                color: (0,0,0,1)
-            Label:
-                text:'G'
-                color: (0,0,0,1)
-            Label:
-                text:'D'
-                color: (0,0,0,1)
-            Label:
-                text:'T'
-                color: (0,0,0,1)
-            Label:
-                text:'L'
+                text: 'Marqueurs'
                 color: (0,0,0,1)
             Label:
                 id: entete_coordos
-                text:'Position'
-                color: (0,0,0,1)
-            Label:
-                id:coordo_1
-                color: (0,0,0,1)
-            Label:
-                id:coordo_2
-                color: (0,0,0,1)
-            Label:
-                id:coordo_3
-                color: (0,0,0,1)
-            Label:
-                id:coordo_4
-                color: (0,0,0,1)
-            Label:
-                id:coordo_5
+                text:'Positions'
                 color: (0,0,0,1)
         Label:
             id: image_nb
             text: 'Image no :'
-            font_size: 18
+            font_size: 15
             size_hint: (.07, .05)
             pos_hint:{'x':.385, 'top':.06}
         TextInput:
@@ -203,7 +203,7 @@
             halign: 'left'
             valign:'top'
             size_hint: (.2, .2)
-            pos_hint:{'x':.55, 'top':.76}
+            pos_hint:{'x':.55, 'top':.75}
         Label:
             id: rep_continuity
             text: ''
@@ -247,11 +247,14 @@
         CheckBox:
             id:save_graph
             pos_hint: {'x':.96, 'top':.79}
-        ToggleButton:
+        Button:
             id:save
             text:'Sauvegarder'
             pos_hint: {'x':.83, 'top':.73}
             size_hint: (.13, .04)
+            background_normal:''
+            background_color:(24/255.0, 192/255.0, 214/255.0, 1)
+            on_press: root.press_color()
             on_press: root.to_save()
         Label:
             text: 'Meilleure symétrie atteinte'
