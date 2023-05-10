@@ -35,7 +35,7 @@ def read_raw_intensity_frames(folder_path):
         if '_I_' in filename:
             frame = read_single_intensity_raw_file(os.path.join(folder_path, filename))
             # removes the '.raw' extension from the end of the filename and replaces it with '.jpg'
-            cv2.imwrite(folder_path + '/Converted/' + filename[:-4] + '.jpg', frame)
+            cv2.imwrite(folder_path + '/intensity/' + filename[:-4] + '.jpg', frame)
 
 # reads the xyz raw file and returns coordinates for detected markers on the corresponding image
 def read_single_xyz_raw_file(file_path, marqueurs):
@@ -67,18 +67,17 @@ def read_single_xyz_raw_file(file_path, marqueurs):
 
 # reads all the xyz raw files in a folder and save the z images in save_path folder (all the frames of an acquisition)
 def read_raw_xyz_frames(folder_path, dict_coordo):
-    for filename in os.listdir(folder_path):
-        # check if it's an xyz file
-        if '_XYZ_' in filename:
-            marqueurs = dict_coordo[f'image{int(filename[19:-4])+1}']
-            # trouve les coordonnées associées aux marqueurs détectés
-            coordos = read_single_xyz_raw_file(os.path.join(folder_path, filename), marqueurs)
-            # removes the '.raw' extension from the end of the filename and replaces it with '.png'
-            csv_filename = folder_path + '/XYZ_converted/' + filename[:-4] + '.csv'
-            with open(csv_filename, 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile, delimiter=';')
-                for c in coordos:
-                    writer.writerow(c)
+    xyz_path = folder_path + '/xyz'
+    for filename in os.listdir(xyz_path):
+        marqueurs = dict_coordo[f'image{int(filename[19:-4])+1}']
+        # trouve les coordonnées associées aux marqueurs détectés
+        coordos = read_single_xyz_raw_file(os.path.join(xyz_path, filename), marqueurs)
+        # removes the '.raw' extension from the end of the filename and replaces it with '.png'
+        csv_filename = folder_path + '/XYZ_converted/' + filename[:-4] + '.csv'
+        with open(csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            for c in coordos:
+                writer.writerow(c)
 
 '''
 folder_path = 'C:/Users/LEA/Desktop/Poly/H2023/Projet 3/Data/Participant01/autocorrection/Prise02/'
