@@ -4,7 +4,7 @@ from kivy.config import Config
 from kivy.lang import Builder
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, Ellipse
-from kivy.uix.button import Button
+from kivy.uix.label import Label
 import os
 import json
 import cv2
@@ -16,18 +16,20 @@ from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import read_raw_file as RRF
 import marker_detection
 
-Window.maximize()
-Builder.load_file('design_interface.kv')
-Config.set('graphics', 'width', '1920')
-Config.set('graphics', 'height', '1080')
-
 class MyApp(Widget):
+    Window.maximize()
+    Builder.load_file('design_interface.kv')
+    Config.set('graphics', 'width', '1920')
+    Config.set('graphics', 'height', '1080')
+
     global path
     path = ''
     global analyse_eff
     analyse_eff = False
     global detection_eff
     detection_eff = False
+    global labelize_extent
+    labelize_extent = False
 
     def press_color(self):
         self.background_normal = ''
@@ -35,6 +37,7 @@ class MyApp(Widget):
 
     # Fonction pour sélectionner le répertoire .raw, puis définir le nombre d'images
     def im_select(self):
+        print(self.width, self.height)
         timer_debut_im = time.process_time_ns()
         
         global path
@@ -57,6 +60,7 @@ class MyApp(Widget):
             global images_total
             
             images_total = len(os.listdir(save_path))
+
             self.ids.slider.max = images_total
             self.ids.image_total.text = f'/{images_total}'
             self.ids.label_ready.text = "Images prêtes, bougez le curseur ou entrez un numéro d'image"
@@ -65,6 +69,9 @@ class MyApp(Widget):
             global dict_coordo
             dict_coordo = {}
             
+            # Lance la détection des marqueurs
+            self.detect_marqueurs()
+
             # Initie la variable pour numéro de l'image affichée à 1 pour voir la première image
             global image_nb
             image_nb = 1
@@ -73,8 +80,16 @@ class MyApp(Widget):
             timer_fin_im = time.process_time_ns()
             print(timer_debut_im, timer_fin_im)
             print(f'Temps création + affichage images : {timer_fin_im - timer_debut_im}')
+
         except FileNotFoundError:
             self.ids.label_ready.text = "Le chemin entré est introuvable. Essayez à nouveau."
+
+    def nb_marqueurs_input(self):
+        global nb_marqueurs
+        nb_marqueurs = int(self.ids.marq_nb_input.text)
+        self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs)
+        self.ids.grid.rows = 1 + nb_marqueurs
+        print(f'{nb_marqueurs} marqueurs utilisés')
 
     # Fonction pour sélectionner le numéro de l'image à afficher, actualise la position du curseur
     def image_nb_input(self):
@@ -102,7 +117,8 @@ class MyApp(Widget):
         self.ids.image_show.source = os.path.join(save_path_im, os.listdir(save_path_im)[image_nb-1])
         self.canvas.remove_group(u"circle") # efface les cercles verts des marqueurs
         self.ids.rep_continuity.text = ''
-        if self.ids.button_detect.state == 'down' and not analyse_eff:
+        if not analyse_eff:
+            '''
             # Affiche les coordonnées des marqueurs de l'image actuelle dans le tableau si détectés, sinon case vide
             if dict_coordo_labels1[f'image{image_nb}']['C7'] != (np.nan, np.nan):
                 self.ids.coordo_1.text = f"({dict_coordo_labels1[f'image{image_nb}']['C7'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['C7'][1]:.0f})"
@@ -124,6 +140,8 @@ class MyApp(Widget):
                 self.ids.coordo_5.text = f"({dict_coordo_labels1[f'image{image_nb}']['L'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['L'][1]:.0f})"
             if dict_coordo_labels1[f'image{image_nb}']['L'] == (np.nan, np.nan):
                 self.ids.coordo_5.text = ''
+            '''
+        
         # Affiche les marqueurs si bouton activé
         if self.ids.button_showmarks.state == 'down':
             self.show_marqueurs()
@@ -137,6 +155,20 @@ class MyApp(Widget):
                         self.ids.rep_continuity.text += f'{m}, '
                     self.ids.rep_continuity.text = self.ids.rep_continuity.text[:-2]
 
+        # Affiche positions dans le tableau après labellisation manuelle
+        if labelize_extent == True:
+            for val in dict_coordo_labels_manual[f'image{image_nb}'].values():
+                self.ids.grid.clear_widgets()
+                self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
+                self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
+                for dict in dict_coordo_labels_manual.values():
+                    for l in dict.keys():
+                        self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
+                        c = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                        self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f})', color=(0,0,0,1)))
+                    break
+        
+        '''
         # Actualisation tableau de coordonnées avec coordos x,y,z si analyse effectuée
         if analyse_eff:
             self.ids.entete_coordos.text = 'Coordonnées (x,y,z)'
@@ -149,7 +181,12 @@ class MyApp(Widget):
             self.ids.origine.text = ''
             self.ids.width.text = ''
             self.ids.height.text = ''
-
+        '''
+        
+        # Efface les marques de labellisation manuelle (ronds bleus) si désactivé
+        if self.ids.labelize_manual.state == 'normal':
+            self.canvas.remove_group(u"label")
+        
     # Fonction pour détecter les marqueurs de toutes les images du répertoire
     def detect_marqueurs(self):
         timer_debut_detection = time.process_time_ns()
@@ -158,7 +195,6 @@ class MyApp(Widget):
         if len(path) > 1:
             # Détection avec algo si mode Nouveau
             if self.ids.check_new.state == 'down':
-
                 marker_detection.annotate_frames(path)
                 i = 0
                 for filename in os.listdir(path+'/landmarks/'):
@@ -177,7 +213,6 @@ class MyApp(Widget):
                 self.labelize()
                 detection_eff = True
             
-
         # Détection avec algo si mode Nouveau
             # if self.ids.check_new.state == 'down':
             #     for i in range(images_total):
@@ -233,9 +268,7 @@ class MyApp(Widget):
             # im_with_key_points = cv2.drawKeypoints(frame_display, key_points, np.array([]), (0, 255, 0),
             #                                cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
             for coordinates in dict_coordo[f'image{image_nb}']:
-                x = (coordinates[0]/im_dim[1])*(702/1960) + 0.02
-                # x = coordinates[0]
-                # y = coordinates[1]
+                x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
                 y = 0.85 - (coordinates[1]/im_dim[0])*0.78
                 with self.canvas:
                     Color(0,1,0,1)
@@ -251,10 +284,10 @@ class MyApp(Widget):
         if detection_eff == True:
             im_prob_nb = [] #liste des images avec ±5 marqueurs
             for im, coordo in dict_coordo.items():
-                if len(coordo) != 5:
+                if len(coordo) != nb_marqueurs:
                     im_prob_nb.append([int(im[5:]), len(coordo)]) #ajoute l'image et le nombre de marqueurs détectés à la liste
             if len(im_prob_nb) > 0:
-                txt = "Numéros des images n'ayant pas 5 marqueurs :\n"
+                txt = f"Numéros des images n'ayant pas {nb_marqueurs} marqueurs :\n"
                 txt_multiline = ''
                 i = len(txt)
                 count = 0
@@ -272,35 +305,38 @@ class MyApp(Widget):
                 else:
                     self.ids.im_prob_nb.text = txt[:-2]
             elif len(im_prob_nb) == 0:
-                self.ids.im_prob_nb.text = '5 marqueurs détectés sur toutes les images !'
+                self.ids.im_prob_nb.text = f'{nb_marqueurs} marqueurs détectés sur toutes les images !'
             return im_prob_nb
    
     # Fonction pour convertir la position touchée en coordonnées de marqueur, puis choisir l'action à exécuter
     def pos_marqueur(self, touch_pos):
-        m_pos = [0,0]
-        # im_dim = (600, 500, 3) = (height, width, channels)
-        if 0.02*self.width <= touch_pos[0] <= (702/1960*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
-            m_pos[0] = (touch_pos[0]/self.width - 0.02)/(702/1960)*im_dim[1]
-            m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
-        # Détermine s'il y a un marqueur à effacer ou si on en ajoute un manquant
-            add_m = False
-            for c in dict_coordo[f'image{image_nb}']:
-                if abs(m_pos[0]-c[0]) < 15 and abs(m_pos[1]-c[1]) < 15:
-                    dict_coordo[f'image{image_nb}'].remove(c)
-                    self.labelize()
-                    if self.ids.button_verif_nb.state == 'down':
-                        self.verif_nb()
-                    if self.ids.button_verif_continuity.state == 'down':
-                        self.continuity()
-                    self.show_image()
-                    add_m = False
-                    break
-                else:
-                    add_m = True
-            if add_m:
-                    self.add_marqueur(m_pos)
-        else:
-            pass
+        if self.ids.labelize_manual.state == 'normal':
+            m_pos = [0,0]
+            # im_dim = (600, 500, 3) = (height, width, channels)
+            if 0.03*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.03*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
+                m_pos[0] = (touch_pos[0]/self.width - 0.03)/(self.ids.image_show.width/self.width)*im_dim[1]
+                m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
+            # Détermine s'il y a un marqueur à effacer ou si on en ajoute un manquant
+                add_m = False
+                for c in dict_coordo[f'image{image_nb}']:
+                    if abs(m_pos[0]-c[0]) < 15 and abs(m_pos[1]-c[1]) < 15:
+                        dict_coordo[f'image{image_nb}'].remove(c)
+                        if labelize_extent == True:
+                            self.extend_labelisation()
+                        self.labelize()
+                        if self.ids.button_verif_nb.state == 'down':
+                            self.verif_nb()
+                        if self.ids.button_verif_continuity.state == 'down':
+                            self.continuity()
+                        self.show_image()
+                        add_m = False
+                        break
+                    else:
+                        add_m = True
+                if add_m:
+                        self.add_marqueur(m_pos)
+            else:
+                pass
 
     def add_marqueur(self, m_pos):
         x = (m_pos[0]/im_dim[1]*(702/1960)+0.02)
@@ -316,6 +352,8 @@ class MyApp(Widget):
         if self.ids.button_verif_continuity.state == 'down':
             self.continuity()
         self.labelize()
+        if labelize_extent == True:
+            self.extend_labelisation()
         self.show_image()
     
     def add_by_continuity(self):
@@ -337,9 +375,9 @@ class MyApp(Widget):
         im_prob_continuity = {}
         if detection_eff:
             for im in range(2, images_total):
-                coordo_prec = dict_coordo_labels1[f'image{im-1}']
-                coordo_act = dict_coordo_labels1[f'image{im}']
-                coordo_next = dict_coordo_labels1[f'image{im+1}']
+                coordo_prec = dict_coordo_labels_manual[f'image{im-1}']
+                coordo_act = dict_coordo_labels_manual[f'image{im}']
+                coordo_next = dict_coordo_labels_manual[f'image{im+1}']
                 for label in ['G', 'D', 'C7', 'T', 'L']:
                     if abs((coordo_next[label][0]-coordo_act[label][0])-(coordo_act[label][0]-coordo_prec[label][0])) > 5:
                         if im not in im_prob_continuity:
@@ -359,10 +397,11 @@ class MyApp(Widget):
         if detection_eff == True:
             xaxis = range(1, images_total+1)
             fig, (ax1, ax2) = plt.subplots(2,1)
-            for m, color in [['C7', 'tab:orange'], ['G', 'tab:red'], ['D', 'tab:green'], ['T', 'k'], ['L', 'tab:blue']]:
+            colors = ['tab:orange', 'tab:red', 'tab:green', 'k', 'tab:blue', 'tab:purple', 'y', 'c']
+            for m, color in zip(labels, colors[0:nb_marqueurs]):
                 plot_x = []
                 plot_y = []
-                for coordo in dict_coordo_labels1.values():
+                for coordo in dict_coordo_labels_manual.values():
                     plot_x.append(coordo[m][0])
                     plot_y.append(coordo[m][1])
                 ax1.scatter(xaxis, plot_x, s=2, label=m, c=color)
@@ -398,6 +437,79 @@ class MyApp(Widget):
                     dict_coordo_labels1[im]['T'] = (x,y)
                 elif 200 < x < 320 and 350 < y < 480:
                     dict_coordo_labels1[im]['L'] = (x,y)
+
+    # Fonction pour labellisation manuelle sur une image, puis étendue sur les autres par proximité
+    def labelize_manual(self, touch_pos):
+        if self.ids.labelize_manual.state == 'down':
+            m_pos = [0,0]
+            # im_dim = (600, 500, 3) = (height, width, channels)
+            if 0.03*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.03*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
+                m_pos[0] = (touch_pos[0]/self.width - 0.03)/(self.ids.image_show.width/self.width)*im_dim[1]
+                m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
+            # Trouve le marqueur le plus près pour lui associer le label
+                for c in dict_coordo[f'image{image_nb}']:
+                    if abs(m_pos[0]-c[0]) < 30 and abs(m_pos[1]-c[1]) < 30:
+                        with self.canvas:
+                            Color(171/255.0, 222/255.0, 231/255.0, .8)
+                            d = 7
+                            Ellipse(pos=(touch_pos[0] - d/2, touch_pos[1] - d/2), size=(d, d), group=u"label")
+                        global m_to_label
+                        m_to_label = c
+                        break   
+        else:
+            pass
+    
+    global dict_coordo_labels_manual
+    dict_coordo_labels_manual = {}
+
+    def label_in(self):
+        label = self.ids.label_input.text
+        #self.ids.label_input.text = ''
+        self.canvas.remove_group(u"label")
+        global dict_coordo_labels_manual
+        if f'image{image_nb}' in dict_coordo_labels_manual.keys():
+            dict_coordo_labels_manual[f'image{image_nb}'].update({label : m_to_label})
+        else:
+            dict_coordo_labels_manual.update({f'image{image_nb}': {label : m_to_label}})
+        print(dict_coordo_labels_manual)
+        self.ids.grid.add_widget(Label(text=f'{label}', color=(0,0,0,1)))
+        self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
+
+        if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
+            global labels
+            labels = []
+            dict_labels = dict_coordo_labels_manual[f'image{image_nb}'].keys()
+            for l in dict_labels:
+                labels.append(l)
+                #self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
+                c = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                #self.ids.grid.add_widget(Label(text=f'({str(int(c[0]))}, {str(int(c[1]))})', color=(0,0,0,1)))
+            self.extend_labelisation()
+    
+    def extend_labelisation(self):
+        global labelize_extent
+        labelize_extent = True
+        for im in list(dict_coordo.keys())[1:]:
+            num = int(im[5:])
+            print(num)
+            dict_coordo_labels_manual.update({im:{}})
+            for label in dict_coordo_labels_manual['image1'].keys():
+                i = 1
+                while i < num:
+                    print('i=', i)
+                    if dict_coordo_labels_manual[f'image{num-i}'][label] != [np.nan, np.nan]:
+                        ref = dict_coordo_labels_manual[f'image{num-i}'][label]
+                        break
+                    else:
+                        i += 1
+                print(ref)
+                for coordos in dict_coordo[im]:
+                    dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
+                    if abs(coordos[0] - ref[0]) < 25 and abs(coordos[1] - ref[1]) < 15:
+                        print('=', coordos)
+                        dict_coordo_labels_manual[im][label] = coordos
+                        break
+        print(dict_coordo_labels_manual)
     
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
@@ -549,12 +661,18 @@ class MyApp(Widget):
     # Sauvegarder les informations souhaitées selon ce qui est coché
     def to_save(self):
         timer_debut_save = time.process_time_ns()
-        analyse_eff = True
-        if analyse_eff:
-            if self.ids.save_positions.state == 'down':
-                if not 'landmarks' in os.listdir(path):
-                    os.mkdir(path+'/landmarks', )
-                self.save_positions()
+      
+        if self.ids.save_positions.state == 'down':
+            if not 'landmarks' in os.listdir(path):
+                os.mkdir(path+'/landmarks', )
+            self.save_positions()
+            
+        if self.ids.save_positions.state == 'down':
+            if not 'Positions' in os.listdir(path):
+                os.mkdir(path+'\\Positions', )
+            self.save_positions()
+            
+        if analyse_eff == True:
             if self.ids.save_metriques.state == 'down':
                 if not 'Metriques' in os.listdir(path):
                     os.mkdir(path+'/Metriques', )
@@ -571,10 +689,13 @@ class MyApp(Widget):
     
     # Crée un csv et y écrit les coordonnées x,y,z des 5 marqueurs selon le numéro de l'image
     def save_positions(self):
-        save_pos = path+'/landmarks'
-        print('writing to ' + save_pos+'/positions_corrigees.json')
-        with open(save_pos+'/positions_corrigees.json', 'w') as positions:
+        save_pos1 = path+'/landmarks'
+        print('writing to ' + save_pos1+'/positions_corrigees.json')
+        with open(save_pos1+'/positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels1, positions)
+        save_po2s = path+'\\Positions'
+        with open(save_pos2+'\\positions_corrigees.json', 'w') as positions:
+            json.dump(dict_coordo_labels_manual, positions)
     
     # Crée un csv et y écrit les métriques et le score global pour chaque image
     def save_metriques(self):
