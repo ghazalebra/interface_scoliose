@@ -42,22 +42,23 @@ class MyApp(Widget):
         
         global path
         path = self.ids.path_input.text
-        save_path = path+'\\Converted'
+        save_path = path+'/intensity'
         global save_path_im
-        save_path_im = path+'\\Preprocessed'
+        save_path_im = path+'/Preprocessed'
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
-            if not 'Converted' in os.listdir(path):
+            if not 'intensity' in os.listdir(path):
                 os.mkdir(save_path, )
             if not 'Preprocessed' in os.listdir(path):
                 os.mkdir(save_path_im, )
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path)
-                for name in os.listdir(save_path):
-                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)))
-                    cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
+            for name in os.listdir(save_path):
+                frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)))
+                cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
             # Trouve le nombre d'images, définit le max du slider et le texte /tot
             global images_total
+            
             images_total = len(os.listdir(save_path))
 
             self.ids.slider.max = images_total
@@ -190,32 +191,50 @@ class MyApp(Widget):
     def detect_marqueurs(self):
         timer_debut_detection = time.process_time_ns()
         global detection_eff
+        
         if len(path) > 1:
             # Détection avec algo si mode Nouveau
             if self.ids.check_new.state == 'down':
-                #marker_detection.annotate_frames(path)
-                #i = 0
-                #for filename in os.listdir(path+'\\landmarks\\'):
-                for i in range(images_total):
+                marker_detection.annotate_frames(path)
+                i = 0
+                for filename in os.listdir(path+'/landmarks/'):
                     coordinates = []
-                    image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
-                    keypoints = marker_detection.detect_markers(image)
+                    keypoints = []
+                    # image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
+                    with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
+                        for line in f.readlines():
+                            keypoints.append(line.split(' '))
+                    
                     for n in range(len(keypoints)):
-                        coordo_xy = [keypoints[n].pt[0], keypoints[n].pt[1]]
+                        coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
                         coordinates.append(coordo_xy)
                     dict_coordo[f'image{i+1}'] = coordinates
+                    i += 1
                 self.labelize()
                 detection_eff = True
+            
+        # Détection avec algo si mode Nouveau
+            # if self.ids.check_new.state == 'down':
+            #     for i in range(images_total):
+            #         coordinates = []
+            #         image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
+            #         keypoints = marker_detection.detect_markers(image)
+            #         for n in range(len(keypoints)):
+            #             coordo_xy = [keypoints[n].pt[0], keypoints[n].pt[1]]
+            #             coordinates.append(coordo_xy)
+            #         dict_coordo[f'image{i+1}'] = coordinates
+            #     self.labelize()
+            #     detection_eff = True
             global im_dim
             im_dim = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[0])).shape
             # Va chercher les positions corrigées enregistrées si mode Ouvrir
             if self.ids.check_open.state == 'down':
                 global analyse_eff
                 analyse_eff = 'Metriques' in os.listdir(path+'') #Analyse effectuée (et utilisable) si métriques enregistrées
-                if 'Positions' in os.listdir(path+''):
+                if 'landmarks' in os.listdir(path+''):
                     # Recrée dictionnaire de positions avec labels
                     global dict_coordo_labels1
-                    jsonfile = open(path+'\\Positions\\positions_corrigees.json')
+                    jsonfile = open(path+'/landmarks/positions_corrigees.json')
                     dict_coordo_labels1 = json.load(jsonfile)
                     for key, marqueurs in dict_coordo_labels1.items():
                         dict_coordo.update({key:[]})
@@ -224,7 +243,7 @@ class MyApp(Widget):
                     # Recrée dictionnaire de coordonnées x,y,z
                     global dict_coordo_xyz_labels
                     dict_coordo_xyz_labels = {}
-                    with open(path+'\\Positions\\coordonnees_xyz.csv', 'r') as csvfile:
+                    with open(path+'/landmarks/coordonnees_xyz.csv', 'r') as csvfile:
                         reader = csv.reader(csvfile, delimiter=';')
                         next(reader)
                         for row in reader: #skip headline
@@ -245,6 +264,9 @@ class MyApp(Widget):
     def show_marqueurs(self):
         # Affichage des marqueurs si bouton activé
         if detection_eff == True:
+            # key_points = detect_markers(preprocessed_frame)
+            # im_with_key_points = cv2.drawKeypoints(frame_display, key_points, np.array([]), (0, 255, 0),
+            #                                cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
             for coordinates in dict_coordo[f'image{image_nb}']:
                 x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
                 y = 0.85 - (coordinates[1]/im_dim[0])*0.78
@@ -494,7 +516,7 @@ class MyApp(Widget):
         global dict_coordo_xyz
         dict_coordo_xyz = {}
         global save_xyz
-        save_xyz = path+'\\XYZ_converted'
+        save_xyz = path+'/XYZ_converted'
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
         if not 'XYZ_converted' in os.listdir(path):
             os.mkdir(save_xyz, )
@@ -639,18 +661,25 @@ class MyApp(Widget):
     # Sauvegarder les informations souhaitées selon ce qui est coché
     def to_save(self):
         timer_debut_save = time.process_time_ns()
+      
+        if self.ids.save_positions.state == 'down':
+            if not 'landmarks' in os.listdir(path):
+                os.mkdir(path+'/landmarks', )
+            self.save_positions()
+            
         if self.ids.save_positions.state == 'down':
             if not 'Positions' in os.listdir(path):
                 os.mkdir(path+'\\Positions', )
             self.save_positions()
+            
         if analyse_eff == True:
             if self.ids.save_metriques.state == 'down':
                 if not 'Metriques' in os.listdir(path):
-                    os.mkdir(path+'\\Metriques', )
+                    os.mkdir(path+'/Metriques', )
                 self.save_metriques()
             if self.ids.save_graph.state == 'down':
                 if not 'Metriques' in os.listdir(path):
-                    os.mkdir(path+'\\Metriques', )
+                    os.mkdir(path+'/Metriques', )
                 self.save_graph_analyze()
         else:
             pass
@@ -660,14 +689,18 @@ class MyApp(Widget):
     
     # Crée un csv et y écrit les coordonnées x,y,z des 5 marqueurs selon le numéro de l'image
     def save_positions(self):
-        save_pos = path+'\\Positions'
-        with open(save_pos+'\\positions_corrigees.json', 'w') as positions:
+        save_pos1 = path+'/landmarks'
+        print('writing to ' + save_pos1+'/positions_corrigees.json')
+        with open(save_pos1+'/positions_corrigees.json', 'w') as positions:
+            json.dump(dict_coordo_labels1, positions)
+        save_po2s = path+'\\Positions'
+        with open(save_pos2+'\\positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels_manual, positions)
     
     # Crée un csv et y écrit les métriques et le score global pour chaque image
     def save_metriques(self):
-        save_pos = path+'\\Positions'
-        with open(save_pos+'\\coordonnees_xyz.csv', 'w', newline='') as csvfile:
+        save_pos = path+'/landmarks'
+        with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerow(['image no', 'C7 x', 'C7 y', 'C7 z', 'G x', 'G y', 'G z', 'D x', 'D y', 'D z',
                              'T x', 'T y', 'T z', 'L x', 'L y', 'L z'])
@@ -677,7 +710,7 @@ class MyApp(Widget):
                                         coordos['D'][0], coordos['D'][1], coordos['D'][2],
                                         coordos['T'][0], coordos['T'][1], coordos['T'][2],
                                         coordos['L'][0], coordos['L'][1], coordos['L'][2]])
-        save_met = path+'\\Metriques\\metriques.csv'
+        save_met = path+'/Metriques/metriques.csv'
         with open(save_met, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerow(['image no'] + list(dict_metriques.keys()))
