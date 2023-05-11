@@ -693,7 +693,7 @@ class MyApp(Widget):
         print('writing to ' + save_pos1+'/positions_corrigees.json')
         with open(save_pos1+'/positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels1, positions)
-        save_po2s = path+'\\Positions'
+        save_pos2 = path+'\\Positions'
         with open(save_pos2+'\\positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels_manual, positions)
     
