@@ -115,7 +115,12 @@
                 text: "Vérifier le nombre\nde marqueurs"
                 on_press: root.press_color()
                 on_press: root.verif_nb()
-            Button:
+            ToggleButton:
+                id: button_delete
+                text: "Supprimer les\nmauvaises détections"
+                on_press: root.press_color()
+                on_press: root.delete_by_continuity()
+            ToggleButton:
                 id: button_interpolate
                 font_size: 15
                 background_normal:''
@@ -144,16 +149,15 @@
             text: 'Label :'
             font_size: 15
             size_hint: (.07, .05)
-            pos_hint:{'x':.39, 'top':.27}
+            pos_hint:{'x':.39, 'top':.28}
         TextInput:
             id: label_input
             text: ''
             font_size: 15
             size_hint: (.048, .045)
-            pos_hint:{'x':.46, 'top':.27}
+            pos_hint:{'x':.46, 'top':.28}
             multiline: False
             on_text_validate: root.label_in()
-
         GridLayout:
             id:grid
             cols:2
@@ -211,7 +215,7 @@
             color: 1,0,0,1
             halign: 'left'
             size_hint: (.12, .1)
-            pos_hint: {'x':.39, 'top':.3}
+            pos_hint: {'x':.39, 'top':.25}
         BoxLayout:
             id: graph
             size_hint: (.47, .6)
@@ -260,14 +264,14 @@
             text: 'Meilleure symétrie atteinte'
             fontsize: 15
             halign:'left'
-            pos_hint:{'x':.41, 'top':.18}
+            pos_hint:{'x':.41, 'top':.16}
             size_hint:(.1, .02)
         Label:
             id:im_best
             text: 'Image no'
             fontsize: 18
             halign:'left'
-            pos_hint:{'x':.4, 'top':.14}
+            pos_hint:{'x':.4, 'top':.13}
             size_hint:(.1, .02)
         Label:
             id:sym_best

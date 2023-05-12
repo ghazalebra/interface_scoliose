@@ -9,8 +9,10 @@ import os
 import json
 import cv2
 import csv
+import math
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline
 import time
 from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import read_raw_file as RRF
@@ -42,23 +44,31 @@ class MyApp(Widget):
         
         global path
         path = self.ids.path_input.text
-        save_path = path+'/intensity'
+        save_path = path+'/intensity/'
+        save_path_xyz = path+'/xyz/'
         global save_path_im
         save_path_im = path+'/Preprocessed'
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
             if not 'intensity' in os.listdir(path):
                 os.mkdir(save_path, )
+            if not 'landmarks' in os.listdir(path):
+                os.mkdir(path+'/landmarks/')
+            if not 'xyz' in os.listdir(path):
+                os.mkdir(save_path_xyz)
             if not 'Preprocessed' in os.listdir(path):
                 os.mkdir(save_path_im, )
             if len(os.listdir(save_path)) == 0:
-                RRF.read_raw_intensity_frames(path)
-            for name in os.listdir(save_path):
-                frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)))
-                cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
+                RRF.read_raw_intensity_frames(path, save_path)
+            if len(os.listdir(save_path_im)) == 0:
+                for name in os.listdir(save_path):
+                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)))
+                    cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
+            if len(os.listdir(save_path_xyz)) == 0:
+                RRF.copy_xyz_frames(path, save_path_xyz)
+
             # Trouve le nombre d'images, définit le max du slider et le texte /tot
             global images_total
-            
             images_total = len(os.listdir(save_path))
 
             self.ids.slider.max = images_total
@@ -194,24 +204,25 @@ class MyApp(Widget):
         
         if len(path) > 1:
             # Détection avec algo si mode Nouveau
-            if self.ids.check_new.state == 'down':
+            if self.ids.check_new.state == 'down' and len(os.listdir(path+'/landmarks/')) == 0:
                 marker_detection.annotate_frames(path)
-                i = 0
-                for filename in os.listdir(path+'/landmarks/'):
-                    coordinates = []
-                    keypoints = []
-                    # image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
-                    with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
-                        for line in f.readlines():
-                            keypoints.append(line.split(' '))
-                    
-                    for n in range(len(keypoints)):
-                        coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
-                        coordinates.append(coordo_xy)
-                    dict_coordo[f'image{i+1}'] = coordinates
-                    i += 1
-                self.labelize()
-                detection_eff = True
+            #i = 0
+            for filename in os.listdir(path+'/landmarks/'):
+                coordinates = []
+                keypoints = []
+                # image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
+                with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
+                    for line in f.readlines():
+                        keypoints.append(line.split(' '))
+                
+                for n in range(len(keypoints)):
+                    coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
+                    coordinates.append(coordo_xy)
+                i = int(filename[5:-14])
+                dict_coordo[f'image{i+1}'] = coordinates
+                #i += 1
+            self.labelize()
+            detection_eff = True
             
         # Détection avec algo si mode Nouveau
             # if self.ids.check_new.state == 'down':
@@ -286,6 +297,7 @@ class MyApp(Widget):
             for im, coordo in dict_coordo.items():
                 if len(coordo) != nb_marqueurs:
                     im_prob_nb.append([int(im[5:]), len(coordo)]) #ajoute l'image et le nombre de marqueurs détectés à la liste
+                    im_prob_nb = sorted(im_prob_nb)
             if len(im_prob_nb) > 0:
                 txt = f"Numéros des images n'ayant pas {nb_marqueurs} marqueurs :\n"
                 txt_multiline = ''
@@ -356,21 +368,39 @@ class MyApp(Widget):
             self.extend_labelisation()
         self.show_image()
     
-    def add_by_continuity(self):
-        if detection_eff == True:
-            im_prob_nb = self.verif_nb()
-            im_prob = [im for [im,nb] in im_prob_nb]
-            for im, nb in im_prob_nb:
-                if im-1 not in im_prob and im+1 not in im_prob and nb == 4:
-                    index_nan = list(dict_coordo_labels1[f'image{im}'].values()).index((np.nan, np.nan))
-                    m_manquant = list(dict_coordo_labels1[f'image{im}'].keys())[index_nan]
-                    x = (dict_coordo_labels1[f'image{im+1}'][m_manquant][0] + dict_coordo_labels1[f'image{im-1}'][m_manquant][0])/2
-                    y = (dict_coordo_labels1[f'image{im+1}'][m_manquant][1] + dict_coordo_labels1[f'image{im-1}'][m_manquant][1])/2
-                    dict_coordo[f'image{im}'].append([x,y]) #ajout marqueur par interpolation linéaire avec images précédente et suivante
-                    self.verif_nb()
-                    self.labelize()
-                    self.show_image()
+    def delete_by_continuity(self):
+        for im in dict_coordo.keys():
+            for c in dict_coordo[im]:
+                if c not in dict_coordo_labels_manual[im].values():
+                    dict_coordo[im].remove(c)
+        self.verif_nb()
+        self.show_image()
 
+    def add_by_continuity(self):
+        im_prob_nb = self.verif_nb()
+        im_prob = [im for [im,nb] in im_prob_nb]
+        splines = self.interpolate_spline()
+        for im in im_prob:
+            for l in labels:
+                if dict_coordo_labels_manual[f'image{im}'][l] == [np.nan, np.nan]:
+                    c = [float(splines[l][0](im)), float(splines[l][1](im))]
+                    dict_coordo[f'image{im}'].append(c)
+                    dict_coordo_labels_manual[f'image{im}'][l] = c
+                    print(dict_coordo_labels_manual[f'image{im}'][l])
+
+        '''
+        for im, nb in im_prob_nb:
+            if im-1 not in im_prob and im+1 not in im_prob and nb == 4:
+                index_nan = list(dict_coordo_labels1[f'image{im}'].values()).index((np.nan, np.nan))
+                m_manquant = list(dict_coordo_labels1[f'image{im}'].keys())[index_nan]
+                x = (dict_coordo_labels1[f'image{im+1}'][m_manquant][0] + dict_coordo_labels1[f'image{im-1}'][m_manquant][0])/2
+                y = (dict_coordo_labels1[f'image{im+1}'][m_manquant][1] + dict_coordo_labels1[f'image{im-1}'][m_manquant][1])/2
+                dict_coordo[f'image{im}'].append([x,y]) #ajout marqueur par interpolation linéaire avec images précédente et suivante
+        '''
+        self.verif_nb()
+        #self.labelize()
+        self.show_image()
+    
     def continuity(self):
         im_prob_continuity = {}
         if detection_eff:
@@ -378,7 +408,7 @@ class MyApp(Widget):
                 coordo_prec = dict_coordo_labels_manual[f'image{im-1}']
                 coordo_act = dict_coordo_labels_manual[f'image{im}']
                 coordo_next = dict_coordo_labels_manual[f'image{im+1}']
-                for label in ['G', 'D', 'C7', 'T', 'L']:
+                for label in labels:
                     if abs((coordo_next[label][0]-coordo_act[label][0])-(coordo_act[label][0]-coordo_prec[label][0])) > 5:
                         if im not in im_prob_continuity:
                             im_prob_continuity.update({im: [label]})
@@ -392,6 +422,38 @@ class MyApp(Widget):
 
         return im_prob_continuity
     
+    def interpolate_spline(self):
+        x_axis = np.arange(images_total)
+        x = {}
+        y = {}
+        splines = {}
+        for l in labels:
+            y.update({l : [[], []]})
+            x.update({l: []})
+            splines.update({l: [[], []]})
+        for im, coordos in dict_coordo_labels_manual.items():
+            for l, c in coordos.items():
+                if not math.isnan(c[0]):
+                    y[l][0].append(c[0])
+                    y[l][1].append(c[1])
+                    x[l].append(im[5:])
+        print(y)
+        fig, ax = plt.subplots()
+        for l in labels:
+            cs_x = CubicSpline(x[l], y[l][0])
+            cs_y = CubicSpline(x[l], y[l][1])
+            splines[l][0] = cs_x
+            splines[l][1] = cs_y
+            '''
+            ax.plot(x_axis, cs_x(x_axis), label=f'{l} x')
+            ax.plot(x_axis, cs_y(x_axis), label=f'{l} y')
+        ax.legend()
+        plt.savefig(path+'/interpolate/test3.png')
+        plt.close()
+        '''
+        return splines
+
+
     def graph_continuity(self):
         # Graphiques des positions des marqueurs selon l'image
         if detection_eff == True:
@@ -471,7 +533,6 @@ class MyApp(Widget):
             dict_coordo_labels_manual[f'image{image_nb}'].update({label : m_to_label})
         else:
             dict_coordo_labels_manual.update({f'image{image_nb}': {label : m_to_label}})
-        print(dict_coordo_labels_manual)
         self.ids.grid.add_widget(Label(text=f'{label}', color=(0,0,0,1)))
         self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
 
@@ -489,7 +550,7 @@ class MyApp(Widget):
     def extend_labelisation(self):
         global labelize_extent
         labelize_extent = True
-        for im in list(dict_coordo.keys())[1:]:
+        for im in list(sorted(dict_coordo.keys(), key=lambda item : int(item[5:])))[1:]:
             num = int(im[5:])
             print(num)
             dict_coordo_labels_manual.update({im:{}})
@@ -497,7 +558,7 @@ class MyApp(Widget):
                 i = 1
                 while i < num:
                     print('i=', i)
-                    if dict_coordo_labels_manual[f'image{num-i}'][label] != [np.nan, np.nan]:
+                    if label in dict_coordo_labels_manual[f'image{num-i}'] and dict_coordo_labels_manual[f'image{num-i}'][label] != [np.nan, np.nan]:
                         ref = dict_coordo_labels_manual[f'image{num-i}'][label]
                         break
                     else:
@@ -505,11 +566,10 @@ class MyApp(Widget):
                 print(ref)
                 for coordos in dict_coordo[im]:
                     dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
-                    if abs(coordos[0] - ref[0]) < 25 and abs(coordos[1] - ref[1]) < 15:
+                    if abs(coordos[0] - ref[0]) < 30 and abs(coordos[1] - ref[1]) < 10:
                         print('=', coordos)
                         dict_coordo_labels_manual[im][label] = coordos
                         break
-        print(dict_coordo_labels_manual)
     
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
