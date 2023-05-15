@@ -2,7 +2,7 @@ import numpy as np
 
 import cv2
 import os
-
+import csv
 from tqdm import tqdm
 import shutil
 
@@ -35,7 +35,7 @@ def read_single_xyz_raw_file(file_path):
         f.seek(header_size)
         # data = f.read()
         data_array = np.fromfile(f, np.float32).reshape((h, w, 3))
-
+    
     # reversing the image vertically
     # data_array = data_array[0:1:1, :]
     # normalizing the values to be in the range (0, 255)
@@ -54,7 +54,6 @@ def read_raw_intensity_frames(folder_path, save_path):
             # removes the '.raw' extension from the end of the filename and replaces it with '.jpg'
             cv2.imwrite(save_path + filename[:-4] + '.jpg', frame)
 
-
 def read_raw_xyz_frames(folder_path, save_path):
     for filename in os.listdir(folder_path):
         # print('found xyz file!')
@@ -67,7 +66,6 @@ def read_raw_xyz_frames(folder_path, save_path):
                 xyz_file.write(str(coordinates))
 
 def copy_xyz_frames(src_path, des_path):
-
     for filename in os.listdir(src_path):
         # print('found xyz file!')
         # check if it's an xyz file
@@ -77,9 +75,42 @@ def copy_xyz_frames(src_path, des_path):
             # print(file_path, save_file_path)
             shutil.copy(file_path, save_file_path)
 
+def write_xyz_coordinates(folder_path, dict_coordo):
+    xyz_path = folder_path + '/xyz/'
+    for filename in os.listdir(xyz_path):
+        marqueurs = dict_coordo[f'image{int(filename[19:-4])+1}']
+        # trouve les coordonnées associées aux marqueurs détectés
+        coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs)
+        # removes the '.raw' extension from the end of the filename and replaces it with '.png'
+        csv_filename = folder_path + '/XYZ_converted/' + filename[:-4] + '.csv'
+        with open(csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            for c in coordos:
+                writer.writerow(c)
 
-# read_raw_xyz_frames(folder_path, save_path)
+def find_xyz_coordinates(file_path, marqueurs):
+    # the image dimensions
+    w = 1936
+    h = 1176
+    header_size = 512
+    with open(file_path, 'r') as f:
+        f.seek(header_size)
+        data_array = np.fromfile(f, np.float32).reshape((h,w,3))
+    #retrieve the depth as an image (and flip upside down)
+    x_array = data_array[:, :,0].T
+    x_array = x_array[-1:0:-1, :][800:1400, 350:850]
+    y_array = data_array[:, :,1].T
+    y_array = y_array[-1:0:-1, :][800:1400, 350:850]
+    z_array = data_array[:, :,2].T
+    z_array = z_array[-1:0:-1, :][800:1400, 350:850]
 
+    coordos = []
+    for el in marqueurs:
+        x = (x_array[round(el[1]),round(el[0])])
+        y = (y_array[round(el[1]),round(el[0])])
+        z = (z_array[round(el[1]),round(el[0])])
+        coordos.append([x, y, z]) #liste de 5 listes contenant les coordos (x,y,z) pour chaque marqueur
+    return coordos
 '''
 path_variants = ['autocorrection/Prise01', 'autocorrection/Prise02']
 # path_variants = ['BG/Libre/Prise02']
