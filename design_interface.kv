@@ -115,18 +115,18 @@
                 text: "Vérifier le nombre\nde marqueurs"
                 on_press: root.press_color()
                 on_press: root.verif_nb()
-            ToggleButton:
+            Button:
                 id: button_delete
-                text: "Supprimer les\nmauvaises détections"
-                on_press: root.press_color()
-                on_press: root.delete_by_continuity()
-            ToggleButton:
-                id: button_interpolate
                 font_size: 15
                 background_normal:''
                 background_color:(24/255.0, 192/255.0, 214/255.0, 1)
                 valign: 'middle'
                 halign: 'center'
+                text: "Supprimer les\nmauvaises détections"
+                on_press: root.press_color()
+                on_press: root.delete_by_continuity()
+            ToggleButton:
+                id: button_interpolate
                 text: "Ajouter des marqueurs\npar interpolation"
                 on_press: root.press_color()
                 on_press: root.add_by_continuity()

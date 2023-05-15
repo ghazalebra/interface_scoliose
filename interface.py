@@ -14,7 +14,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 import time
-from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+
+from scipy.interpolate.fitpack import splev, splrep
+#from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import read_raw_file as RRF
 import marker_detection
 
@@ -167,31 +169,27 @@ class MyApp(Widget):
 
         # Affiche positions dans le tableau après labellisation manuelle
         if labelize_extent == True:
-            for val in dict_coordo_labels_manual[f'image{image_nb}'].values():
-                self.ids.grid.clear_widgets()
-                self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
-                self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
-                for dict in dict_coordo_labels_manual.values():
-                    for l in dict.keys():
-                        self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
-                        c = dict_coordo_labels_manual[f'image{image_nb}'][l]
-                        self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f})', color=(0,0,0,1)))
-                    break
-        
-        '''
+            self.ids.grid.clear_widgets()
+            self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
+            self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
+            for l in labels:
+                self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
+                c = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f})', color=(0,0,0,1)))
+    
         # Actualisation tableau de coordonnées avec coordos x,y,z si analyse effectuée
         if analyse_eff:
-            self.ids.entete_coordos.text = 'Coordonnées (x,y,z)'
+            self.ids.grid.clear_widgets()
+            self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
+            self.ids.grid.add_widget(Label(text='Coordonnées (x,y,z)', color=(0,0,0,1)))
             d_im = dict_coordo_xyz_labels[f'image{image_nb}']
-            self.ids.coordo_1.text = f"({d_im['C7'][0]:.0f}, {d_im['C7'][1]:.0f}, {d_im['C7'][2]:.0f})"
-            self.ids.coordo_2.text = f"({d_im['G'][0]:.0f}, {d_im['G'][1]:.0f}, {d_im['G'][2]:.0f})"
-            self.ids.coordo_3.text = f"({d_im['D'][0]:.0f}, {d_im['D'][1]:.0f}, {d_im['D'][2]:.0f})"
-            self.ids.coordo_4.text = f"({d_im['T'][0]:.0f}, {d_im['T'][1]:.0f}, {d_im['T'][2]:.0f})"
-            self.ids.coordo_5.text = f"({d_im['L'][0]:.0f}, {d_im['L'][1]:.0f}, {d_im['L'][2]:.0f})"
+            for l in d_im.keys():
+                self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
+                c = d_im[l]
+                self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f}, {c[2]:.0f})', color=(0,0,0,1)))
             self.ids.origine.text = ''
             self.ids.width.text = ''
             self.ids.height.text = ''
-        '''
         
         # Efface les marques de labellisation manuelle (ronds bleus) si désactivé
         if self.ids.labelize_manual.state == 'normal':
@@ -379,16 +377,22 @@ class MyApp(Widget):
     def add_by_continuity(self):
         im_prob_nb = self.verif_nb()
         im_prob = [im for [im,nb] in im_prob_nb]
-        splines = self.interpolate_spline()
+        splines, splines_smooth = self.interpolate_spline()
         for im in im_prob:
             for l in labels:
-                if dict_coordo_labels_manual[f'image{im}'][l] == [np.nan, np.nan]:
-                    c = [float(splines[l][0](im)), float(splines[l][1](im))]
-                    dict_coordo[f'image{im}'].append(c)
-                    dict_coordo_labels_manual[f'image{im}'][l] = c
-                    print(dict_coordo_labels_manual[f'image{im}'][l])
-
+                c = dict_coordo_labels_manual[f'image{im}'][l]
+                if len(splines_smooth[l][0]) > 1:
+                    c_interpolate = [float(splines_smooth[l][0][im]), float(splines_smooth[l][1][im])]
+                    if c == [np.nan, np.nan]:
+                        dict_coordo[f'image{im}'].append(c_interpolate)
+                        dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
+                    if abs(c[0] - c_interpolate[0]) > 10 and abs(c[1] - c_interpolate[1]) > 10:
+                        dict_coordo[f'image{im}'].remove(c)
+                        dict_coordo[f'image{im}'].append(c_interpolate)
+                        dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
+        self.show_image()
         '''
+        # ajout par position moyenne sur les images précédente et suivante
         for im, nb in im_prob_nb:
             if im-1 not in im_prob and im+1 not in im_prob and nb == 4:
                 index_nan = list(dict_coordo_labels1[f'image{im}'].values()).index((np.nan, np.nan))
@@ -427,10 +431,14 @@ class MyApp(Widget):
         x = {}
         y = {}
         splines = {}
+        spl = {}
+        splines_smooth = {}
         for l in labels:
             y.update({l : [[], []]})
             x.update({l: []})
             splines.update({l: [[], []]})
+            spl.update({l: [[], []]})
+            splines_smooth.update({l: [[], []]})
         for im, coordos in dict_coordo_labels_manual.items():
             for l, c in coordos.items():
                 if not math.isnan(c[0]):
@@ -440,10 +448,19 @@ class MyApp(Widget):
         print(y)
         fig, ax = plt.subplots()
         for l in labels:
+            m = len(x[l])
+            sm = m-math.sqrt(2*m)
             cs_x = CubicSpline(x[l], y[l][0])
             cs_y = CubicSpline(x[l], y[l][1])
             splines[l][0] = cs_x
             splines[l][1] = cs_y
+            smooth_x = splrep(x[l], y[l][0], s=sm)
+            smooth_y = splrep(x[l], y[l][1], s=sm)
+            spl[l][0] = smooth_x
+            spl[l][1] = smooth_y
+            if m > 3:
+                splines_smooth[l][0] = splev(x_axis, spl[l][0])
+                splines_smooth[l][1] = splev(x_axis, spl[l][1])
             '''
             ax.plot(x_axis, cs_x(x_axis), label=f'{l} x')
             ax.plot(x_axis, cs_y(x_axis), label=f'{l} y')
@@ -451,8 +468,7 @@ class MyApp(Widget):
         plt.savefig(path+'/interpolate/test3.png')
         plt.close()
         '''
-        return splines
-
+        return splines, splines_smooth
 
     def graph_continuity(self):
         # Graphiques des positions des marqueurs selon l'image
@@ -474,7 +490,7 @@ class MyApp(Widget):
             ax2.set_ylabel("Coordonnée en y", fontsize=9)
             ax2.set_xlabel("Numéro de l'image", fontsize=9)
             #plt.savefig(r'C:\Users\LEA\Desktop\Poly\H2023\Projet 3\graph_continuity_1.png')
-            self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+            #self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
             plt.close()
 
         if self.ids.button_graph_continuity.state == 'normal':
@@ -548,26 +564,23 @@ class MyApp(Widget):
             self.extend_labelisation()
     
     def extend_labelisation(self):
+        print('extend labelisation')
         global labelize_extent
         labelize_extent = True
         for im in list(sorted(dict_coordo.keys(), key=lambda item : int(item[5:])))[1:]:
             num = int(im[5:])
-            print(num)
             dict_coordo_labels_manual.update({im:{}})
             for label in dict_coordo_labels_manual['image1'].keys():
                 i = 1
                 while i < num:
-                    print('i=', i)
                     if label in dict_coordo_labels_manual[f'image{num-i}'] and dict_coordo_labels_manual[f'image{num-i}'][label] != [np.nan, np.nan]:
                         ref = dict_coordo_labels_manual[f'image{num-i}'][label]
                         break
                     else:
                         i += 1
-                print(ref)
                 for coordos in dict_coordo[im]:
                     dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
                     if abs(coordos[0] - ref[0]) < 30 and abs(coordos[1] - ref[1]) < 10:
-                        print('=', coordos)
                         dict_coordo_labels_manual[im][label] = coordos
                         break
     
@@ -580,9 +593,10 @@ class MyApp(Widget):
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
         if not 'XYZ_converted' in os.listdir(path):
             os.mkdir(save_xyz, )
-        RRF.read_raw_xyz_frames(path, dict_coordo)
+        RRF.write_xyz_coordinates(path, dict_coordo)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
-        for filename, key in zip(os.listdir(save_xyz), dict_coordo.keys()):
+        for filename in os.listdir(save_xyz):
+            key = f'image{int(filename[19:-4])+1}'
             with open(os.path.join(save_xyz, filename), newline='') as csvfile:
                 reader = csv.reader(csvfile, delimiter=';')
                 dict_coordo_xyz.update({key : []})
@@ -605,6 +619,24 @@ class MyApp(Widget):
             dict_coordo_xyz_labels[im].update({'C7': coordos_sorted_y[2]}) #plus grande valeur en y = C7
             dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[1]})
             dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[0]})
+    
+    def labelize_8(self):
+        global dict_coordo_xyz_labels
+        dict_coordo_xyz_labels = {}
+        for im, coordos in dict_coordo_xyz.items():
+            coordos_sorted_x = sorted(coordos, key=lambda tup: tup[0])
+            dict_coordo_xyz_labels.update({im: {'G': coordos_sorted_x[0]}}) #plus petite valeur en x = gauche
+            dict_coordo_xyz_labels[im].update({'IG': coordos_sorted_x[1]})
+            dict_coordo_xyz_labels[im].update({'IG': coordos_sorted_x[-2]})
+            dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
+            del coordos_sorted_x[0]
+            del coordos_sorted_x[1]
+            del coordos_sorted_x[-2]
+            del coordos_sorted_x[-1]
+            coordos_sorted_y = sorted(coordos_sorted_x, key=lambda tup: tup[1])
+            dict_coordo_xyz_labels[im].update({'C7': coordos_sorted_y[-1]}) #plus grande valeur en y = C7
+            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[1]})
+            dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[0]})
 
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
@@ -613,7 +645,11 @@ class MyApp(Widget):
             global analyse_eff
             analyse_eff = True
             self.coordo_xyz_marqueurs()
-            self.labelize_5()
+            if nb_marqueurs == 5:
+                self.labelize_5()
+            if nb_marqueurs == 8:
+                self.labelize_8()
+            print(dict_coordo_xyz_labels)
             if self.ids.button_analyze.state == 'down':
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': [], 'angle_rachis': [], 'var_rachis': []}
@@ -654,7 +690,7 @@ class MyApp(Widget):
 
                 # Crée le graphique et l'affiche sur l'interface
                 self.graph_analyze()
-                self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+                #self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
                 plt.close()
                 print(self.max_symmetry())
 
@@ -725,9 +761,6 @@ class MyApp(Widget):
         if self.ids.save_positions.state == 'down':
             if not 'landmarks' in os.listdir(path):
                 os.mkdir(path+'/landmarks', )
-            self.save_positions()
-            
-        if self.ids.save_positions.state == 'down':
             if not 'Positions' in os.listdir(path):
                 os.mkdir(path+'\\Positions', )
             self.save_positions()
@@ -736,6 +769,8 @@ class MyApp(Widget):
             if self.ids.save_metriques.state == 'down':
                 if not 'Metriques' in os.listdir(path):
                     os.mkdir(path+'/Metriques', )
+                if not 'Positions' in os.listdir(path):
+                    os.mkdir(path+'\\Positions', )
                 self.save_metriques()
             if self.ids.save_graph.state == 'down':
                 if not 'Metriques' in os.listdir(path):
@@ -749,17 +784,16 @@ class MyApp(Widget):
     
     # Crée un csv et y écrit les coordonnées x,y,z des 5 marqueurs selon le numéro de l'image
     def save_positions(self):
-        save_pos1 = path+'/landmarks'
-        print('writing to ' + save_pos1+'/positions_corrigees.json')
-        with open(save_pos1+'/positions_corrigees.json', 'w') as positions:
+        save_pos = path+'\\Positions'
+        print('writing to ' + save_pos+'/positions_corrigees.json')
+        with open(save_pos+'/positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels1, positions)
-        save_pos2 = path+'\\Positions'
-        with open(save_pos2+'\\positions_corrigees.json', 'w') as positions:
+        with open(save_pos+'\\positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels_manual, positions)
     
     # Crée un csv et y écrit les métriques et le score global pour chaque image
     def save_metriques(self):
-        save_pos = path+'/landmarks'
+        save_pos = path+'/Positions'
         with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerow(['image no', 'C7 x', 'C7 y', 'C7 z', 'G x', 'G y', 'G z', 'D x', 'D y', 'D z',
