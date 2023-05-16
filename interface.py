@@ -236,23 +236,30 @@ class MyApp(Widget):
             #     detection_eff = True
             global im_dim
             im_dim = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[0])).shape
+
             # Va chercher les positions corrigées enregistrées si mode Ouvrir
             if self.ids.check_open.state == 'down':
                 global analyse_eff
                 analyse_eff = 'Metriques' in os.listdir(path+'') #Analyse effectuée (et utilisable) si métriques enregistrées
-                if 'landmarks' in os.listdir(path+''):
+                if 'Positions' in os.listdir(path+''):
                     # Recrée dictionnaire de positions avec labels
                     global dict_coordo_labels1
-                    jsonfile = open(path+'/landmarks/positions_corrigees.json')
+                    jsonfile = open(path+'/Positions/positions_corrigees.json')
                     dict_coordo_labels1 = json.load(jsonfile)
                     for key, marqueurs in dict_coordo_labels1.items():
                         dict_coordo.update({key:[]})
                         for m in marqueurs.values():
                             dict_coordo[key].append(m)
+                    
+                    global dict_coordo_labels_manual
+                    dict_coordo_labels_manual = dict_coordo_labels1
+
+                    global labels
+                    labels = dict_coordo_labels_manual['image1'].keys()
                     # Recrée dictionnaire de coordonnées x,y,z
                     global dict_coordo_xyz_labels
                     dict_coordo_xyz_labels = {}
-                    with open(path+'/landmarks/coordonnees_xyz.csv', 'r') as csvfile:
+                    with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
                         reader = csv.reader(csvfile, delimiter=';')
                         next(reader)
                         for row in reader: #skip headline
@@ -265,6 +272,14 @@ class MyApp(Widget):
                             L = [row[12], row[13], row[14]]
                             dict_coordo_xyz_labels.update({key: {'C7':C7, 'G':G, 'D':D, 'T':T, 'L':L}})
                 detection_eff = True
+
+                global nb_marqueurs
+                nb_marqueurs = len(dict_coordo_xyz_labels[f'image1'])
+                self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs)
+                self.ids.grid.rows = 1 + nb_marqueurs
+
+                
+
         timer_fin_detection = time.process_time_ns()
         print(timer_debut_detection, timer_fin_detection)
         print(f'Temps détection des marqueurs :{timer_fin_detection - timer_debut_detection}')
@@ -318,7 +333,7 @@ class MyApp(Widget):
                 self.ids.im_prob_nb.text = f'{nb_marqueurs} marqueurs détectés sur toutes les images !'
             return im_prob_nb
    
-    # Fonction pour convertir la position touchée en coordonnées de marqueur, puis choisir l'action à exécuter
+    # Fonction pour convertir la position touchée en coordonnées de marqueur, puis choisir l'action à exécuter (delete or add)
     def pos_marqueur(self, touch_pos):
         if self.ids.labelize_manual.state == 'normal':
             m_pos = [0,0]
@@ -329,7 +344,7 @@ class MyApp(Widget):
             # Détermine s'il y a un marqueur à effacer ou si on en ajoute un manquant
                 add_m = False
                 for c in dict_coordo[f'image{image_nb}']:
-                    if abs(m_pos[0]-c[0]) < 15 and abs(m_pos[1]-c[1]) < 15:
+                    if abs(m_pos[0]-c[0]) < 10 and abs(m_pos[1]-c[1]) < 10:
                         dict_coordo[f'image{image_nb}'].remove(c)
                         if labelize_extent == True:
                             self.extend_labelisation()
@@ -348,6 +363,7 @@ class MyApp(Widget):
             else:
                 pass
 
+    # Ajout manuel d'un marqueur sur commande par un clic sur l'image
     def add_marqueur(self, m_pos):
         x = (m_pos[0]/im_dim[1]*(702/1960)+0.02)
         y = (0.85 - m_pos[1]/im_dim[0]*0.78)
@@ -366,6 +382,7 @@ class MyApp(Widget):
             self.extend_labelisation()
         self.show_image()
     
+    # Supprime les marqueurs qui n'ont pas été identifiés dans la prolongation de la labellisation manuelle
     def delete_by_continuity(self):
         for im in dict_coordo.keys():
             for c in dict_coordo[im]:
@@ -374,6 +391,7 @@ class MyApp(Widget):
         self.verif_nb()
         self.show_image()
 
+    # Ajoute des marqueurs manquants selon les splines d'interpolation
     def add_by_continuity(self):
         im_prob_nb = self.verif_nb()
         im_prob = [im for [im,nb] in im_prob_nb]
@@ -386,7 +404,7 @@ class MyApp(Widget):
                     if c == [np.nan, np.nan]:
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
-                    if abs(c[0] - c_interpolate[0]) > 10 and abs(c[1] - c_interpolate[1]) > 10:
+                    if abs(c[0] - c_interpolate[0]) > 5 and abs(c[1] - c_interpolate[1]) > 5:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
@@ -428,10 +446,8 @@ class MyApp(Widget):
     
     def interpolate_spline(self):
         x_axis = np.arange(images_total)
-        x = {}
-        y = {}
-        splines = {}
-        spl = {}
+        x, y = {}, {}
+        splines, spl = {}, {}
         splines_smooth = {}
         for l in labels:
             y.update({l : [[], []]})
@@ -445,29 +461,55 @@ class MyApp(Widget):
                     y[l][0].append(c[0])
                     y[l][1].append(c[1])
                     x[l].append(im[5:])
-        print(y)
-        fig, ax = plt.subplots()
+
         for l in labels:
             m = len(x[l])
             sm = m-math.sqrt(2*m)
+            w = np.ones(m) #poids de 1 à tous les points
+            w[0] = 5
+            w[-1] = 5
             cs_x = CubicSpline(x[l], y[l][0])
             cs_y = CubicSpline(x[l], y[l][1])
             splines[l][0] = cs_x
             splines[l][1] = cs_y
-            smooth_x = splrep(x[l], y[l][0], s=sm)
-            smooth_y = splrep(x[l], y[l][1], s=sm)
-            spl[l][0] = smooth_x
-            spl[l][1] = smooth_y
-            if m > 3:
+            if m > 5:
+                smooth_x = splrep(x[l], y[l][0], w, k=5, s=sm)
+                smooth_y = splrep(x[l], y[l][1], w, k=5, s=sm)
+                spl[l][0] = smooth_x
+                spl[l][1] = smooth_y
                 splines_smooth[l][0] = splev(x_axis, spl[l][0])
                 splines_smooth[l][1] = splev(x_axis, spl[l][1])
-            '''
-            ax.plot(x_axis, cs_x(x_axis), label=f'{l} x')
-            ax.plot(x_axis, cs_y(x_axis), label=f'{l} y')
-        ax.legend()
-        plt.savefig(path+'/interpolate/test3.png')
-        plt.close()
-        '''
+        
+        if not 'interpolate' in os.listdir(path):
+            os.mkdir(path+ '/interpolate/')
+        fig, (ax1, ax2, ax3) = plt.subplots(1,3)
+        ax1.scatter(x_axis, splines['G'][0](x_axis), s=5, label=f'G x')
+        ax1.plot(x_axis, splines_smooth['G'][0], label=f'G x smooth')
+        ax1.legend()
+        ax2.scatter(x_axis, splines['D'][0](x_axis), s=5, label=f'D x')
+        ax2.plot(x_axis, splines_smooth['D'][0], label=f'D x smooth')
+        ax2.legend()
+        for l in ['C', 'T', 'L']:
+            ax3.scatter(x_axis, splines[l][0](x_axis), s=5, label=f'{l} x')
+            ax3.plot(x_axis, splines_smooth[l][0], label=f'{l} x smooth')
+        ax3.legend()
+        plt.savefig(path+'/interpolate/smoothing_a_s.png')
+        plt.close() 
+
+        fig, (ax4, ax5, ax6) = plt.subplots(1,3)
+        ax4.scatter(x_axis, splines['C'][0](x_axis), s=5, label=f'C x')
+        ax4.plot(x_axis, splines_smooth['C'][0], label=f'C Y smooth')
+        ax4.legend()
+        ax5.scatter(x_axis, splines['L'][0](x_axis), s=5, label=f'L x')
+        ax5.plot(x_axis, splines_smooth['L'][0], label=f'L Y smooth')
+        ax5.legend()
+        for l in ['G', 'D', 'C']:
+            ax6.scatter(x_axis, splines[l][0](x_axis), s=5, label=f'{l} Y')
+            ax6.plot(x_axis, splines_smooth[l][0], label=f'{l} Y smooth')
+        ax6.legend()
+        plt.savefig(path+'/interpolate/smoothing_b_s.png')
+        plt.close()        
+
         return splines, splines_smooth
 
     def graph_continuity(self):
@@ -580,7 +622,7 @@ class MyApp(Widget):
                         i += 1
                 for coordos in dict_coordo[im]:
                     dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
-                    if abs(coordos[0] - ref[0]) < 30 and abs(coordos[1] - ref[1]) < 10:
+                    if abs(coordos[0] - ref[0]) < 25 and abs(coordos[1] - ref[1]) < 10:
                         dict_coordo_labels_manual[im][label] = coordos
                         break
     
@@ -589,7 +631,7 @@ class MyApp(Widget):
         global dict_coordo_xyz
         dict_coordo_xyz = {}
         global save_xyz
-        save_xyz = path+'/XYZ_converted'
+        save_xyz = path+'/XYZ_converted/'
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
         if not 'XYZ_converted' in os.listdir(path):
             os.mkdir(save_xyz, )
@@ -624,19 +666,20 @@ class MyApp(Widget):
         global dict_coordo_xyz_labels
         dict_coordo_xyz_labels = {}
         for im, coordos in dict_coordo_xyz.items():
-            coordos_sorted_x = sorted(coordos, key=lambda tup: tup[0])
-            dict_coordo_xyz_labels.update({im: {'G': coordos_sorted_x[0]}}) #plus petite valeur en x = gauche
-            dict_coordo_xyz_labels[im].update({'IG': coordos_sorted_x[1]})
-            dict_coordo_xyz_labels[im].update({'IG': coordos_sorted_x[-2]})
+            coordos_sorted_y = sorted(coordos, key=lambda tup: tup[1])
+            dict_coordo_xyz_labels.update({im: {'C7': coordos_sorted_y[-1]}}) #plus petite valeur en y = C7
+            dict_coordo_xyz_labels[im].update({'T1': coordos_sorted_y[-2]})
+            dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[2]})
+            epines = coordos_sorted_y[0:2]
+            epines = sorted(epines, key=lambda tup: tup[0])
+            dict_coordo_xyz_labels[im].update({'IG': epines[0]})
+            dict_coordo_xyz_labels[im].update({'IG': epines[1]})
+            del coordos_sorted_y[0:3]
+            del coordos_sorted_y[-2:]
+            coordos_sorted_x = sorted(coordos_sorted_y, key=lambda tup: tup[0])
             dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
-            del coordos_sorted_x[0]
-            del coordos_sorted_x[1]
-            del coordos_sorted_x[-2]
-            del coordos_sorted_x[-1]
-            coordos_sorted_y = sorted(coordos_sorted_x, key=lambda tup: tup[1])
-            dict_coordo_xyz_labels[im].update({'C7': coordos_sorted_y[-1]}) #plus grande valeur en y = C7
-            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[1]})
-            dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[0]})
+            dict_coordo_xyz_labels[im].update({'G': coordos_sorted_x[0]})
+            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_x[1]})
 
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
