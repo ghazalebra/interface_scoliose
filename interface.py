@@ -16,7 +16,7 @@ from scipy.interpolate import CubicSpline
 import time
 
 from scipy.interpolate.fitpack import splev, splrep
-#from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import read_raw_file as RRF
 import marker_detection
 
@@ -174,18 +174,23 @@ class MyApp(Widget):
             self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
             for l in labels:
                 self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
-                c = dict_coordo_labels_manual[f'image{image_nb}'][l]
-                self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f})', color=(0,0,0,1)))
+                p = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                self.ids.grid.add_widget(Label(text=f'({p[0]:.0f}, {p[1]:.0f})', color=(0,0,0,1)))
     
         # Actualisation tableau de coordonnées avec coordos x,y,z si analyse effectuée
         if analyse_eff:
             self.ids.grid.clear_widgets()
+            self.ids.grid.cols = 3
+            self.ids.grid.size_hint = (.27, .2)
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
+            self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Coordonnées (x,y,z)', color=(0,0,0,1)))
             d_im = dict_coordo_xyz_labels[f'image{image_nb}']
-            for l in d_im.keys():
-                self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
-                c = d_im[l]
+            for key, l in zip(d_im.keys(), labels):
+                self.ids.grid.add_widget(Label(text=f'{key}', color=(0,0,0,1)))
+                p = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                self.ids.grid.add_widget(Label(text=f'({p[0]:.0f}, {p[1]:.0f})', color=(0,0,0,1)))
+                c = d_im[key]
                 self.ids.grid.add_widget(Label(text=f'({c[0]:.0f}, {c[1]:.0f}, {c[2]:.0f})', color=(0,0,0,1)))
             self.ids.origine.text = ''
             self.ids.width.text = ''
@@ -532,7 +537,7 @@ class MyApp(Widget):
             ax2.set_ylabel("Coordonnée en y", fontsize=9)
             ax2.set_xlabel("Numéro de l'image", fontsize=9)
             #plt.savefig(r'C:\Users\LEA\Desktop\Poly\H2023\Projet 3\graph_continuity_1.png')
-            #self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+            self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
             plt.close()
 
         if self.ids.button_graph_continuity.state == 'normal':
@@ -635,6 +640,10 @@ class MyApp(Widget):
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
         if not 'XYZ_converted' in os.listdir(path):
             os.mkdir(save_xyz, )
+
+        for key in dict_coordo_labels_manual.keys():
+            dict_coordo[key] = list(dict_coordo_labels_manual[key].values())
+
         RRF.write_xyz_coordinates(path, dict_coordo)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
         for filename in os.listdir(save_xyz):
@@ -645,6 +654,10 @@ class MyApp(Widget):
                 for row in reader:
                     row = [float(i) for i in row]
                     dict_coordo_xyz[key].append([row[1], row[0], row[2]])
+
+        print(dict_coordo)
+        print(dict_coordo_labels_manual)
+        print(dict_coordo_xyz)
     
     # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
@@ -733,7 +746,7 @@ class MyApp(Widget):
 
                 # Crée le graphique et l'affiche sur l'interface
                 self.graph_analyze()
-                #self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+                self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
                 plt.close()
                 print(self.max_symmetry())
 
