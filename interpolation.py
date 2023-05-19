@@ -2,64 +2,67 @@ import json
 import math
 import os
 import numpy as np
-from scipy.interpolate import CubicSpline, interp1d, make_interp_spline
-from scipy.interpolate.fitpack import splev, splrep
+from scipy.interpolate import CubicSpline, interp1d, make_interp_spline, UnivariateSpline, splev, splrep
 
 import matplotlib.pyplot as plt
 
-path = r'C:\Users\ledro\StageE23\Data\Ete_2022\Participant06\autocorrection\Prise01'
+path = r'C:\Users\ledro\StageE23\Data\Ete_2022\Participant06\autocorrection\Prise02'
 
 jsonfile = open(path+'/Positions/positions_corrigees.json')
 dict_coordo_labels = json.load(jsonfile)
 
 labels = list(dict_coordo_labels['image1'].keys())
 
-x_axis = range(len(list(dict_coordo_labels.keys())))
+x_axis = range(1, len(list(dict_coordo_labels.keys()))+1)
 x, y = {}, {}
 cs, spl, s1d, interp = {}, {}, {}, {}
 for l in labels:
-        y.update({l : [[], []]})
-        x.update({l: []})
-        cs.update({l: [[], []]})
-        spl.update({l: [[], []]})
-        s1d.update({l: [[], []]})
-        interp.update({l: [[], []]})
+    y.update({l : [[], []]})
+    x.update({l: []})
+    cs.update({l: [[], []]})
+    spl.update({l: [[], []]})
+    s1d.update({l: [[], []]})
+    interp.update({l: [[], []]})
 for im, coordos in dict_coordo_labels.items():
     for l, c in coordos.items():
-        if not math.isnan(c[0]):
+        if not np.isnan(c[0]):
             y[l][0].append(c[0])
             y[l][1].append(c[1])
-            x[l].append(im[5:])
+            x[l].append(int(im[5:]))
 
 for l in labels:
     m = len(x[l])
     sm = m-math.sqrt(2*m)
+    print(sm)
+    std_0 = np.std(y[l][0])
+    std_1 = np.std(y[l][1])
+    print(std_0, std_1)
     w = np.ones(m) #poids de 1 à tous les points
     w[0] = 5
     w[-1] = 5
-    cs[l][0] = CubicSpline(x[l], y[l][0])
-    cs[l][1] = CubicSpline(x[l], y[l][1])
-    s1d[l][0] = splrep(x[l], y[l][0], w, k=3, s=15)
-    s1d[l][1] = splrep(x[l], y[l][1], w, k=3, s=15)
-    interp[l][0] = make_interp_spline(x[l], y[l][0])
-    interp[l][1] = make_interp_spline(x[l], y[l][1])
+    cs[l][0] = CubicSpline(x[l], y[l][0], bc_type='clamped')
+    cs[l][1] = CubicSpline(x[l], y[l][1], bc_type='clamped')
+    s1d[l][0] = splrep(x[l], y[l][0], w, k=3, s=sm/3)
+    s1d[l][1] = splrep(x[l], y[l][1], w, k=3, s=sm/3)
+    interp[l][0] = interp1d(x[l], y[l][0], 'cubic')
+    interp[l][1] = interp1d(x[l], y[l][1], 'cubic')
     #mss[l][0] = make_smoothing_spline(x[l], y[l][0])
 
 fig, ax = plt.subplots()
 for l in labels:
     ax.scatter(x[l], y[l][0], label=f'{l} data')
-    #ax.plot(x_axis, cs[l][0](x_axis), label=f'{l} cubic')
-    ax.plot(x_axis, splev(x_axis, s1d[l][0]), label=f'{l}1d')
-    #ax.plot(x_axis, interp[l][0](x_axis), label=f'{l}make_interp')
+    ax.plot(x_axis, cs[l][0](x_axis), label=f'{l} cubic')
+    ax.plot(x_axis, splev(x_axis, s1d[l][0]), label=f'{l}spl')
+    #ax.plot(x_axis, interp[l][0](x_axis), label=f'{l}interp')
 ax.legend()
 plt.show()
 
 fig, ax = plt.subplots()
 for l in labels:
     ax.scatter(x[l], y[l][1], label=f'{l} data')
-    #ax.plot(x_axis, cs[l][1](x_axis), label=f'{l} cubic')
-    ax.plot(x_axis, splev(x_axis, s1d[l][1]), label=f'{l}1d')
-    #ax.plot(x_axis, interp[l][1](x_axis), label=f'{l}make_interp')
+    ax.plot(x_axis, cs[l][1](x_axis), label=f'{l} cubic')
+    ax.plot(x_axis, splev(x_axis, s1d[l][1]), label=f'{l}spl')
+    #ax.plot(x_axis, interp[l][1](x_axis), label=f'{l}interp')
 ax.legend()
 plt.show()
 
