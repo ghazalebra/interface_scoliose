@@ -21,12 +21,12 @@ def read_single_xyz_raw_file(file_path):
     return data_array
 
 # input is an image (one frame of movement sequence)
-def annotate_single_frame(frame, bg=False, frame_xyz=None):
+def annotate_single_frame(crop, frame, bg=False, frame_xyz=None):
 
     if bg:
         frame = remove_bg(frame, frame_xyz)
 
-    frame_display, preprocessed_frame = preprocess(frame)
+    frame_display, preprocessed_frame = preprocess(frame, crop)
 
     key_points = detect_markers(preprocessed_frame)
     im_with_key_points = cv2.drawKeypoints(frame_display, key_points, np.array([]), (0, 255, 0),
@@ -40,7 +40,7 @@ def annotate_single_frame(frame, bg=False, frame_xyz=None):
 # reads the xyz .raw files from path/xyz
 # The annotated frames will be saved in save_path/annotated_frames
 # The landmarks will be saved in save_path/landmarks
-def annotate_frames(path):
+def annotate_frames(path, crop):
     i = 0
     intensity_path = path + '/intensity/'
     xyz_path = path + '/xyz/'
@@ -51,7 +51,7 @@ def annotate_frames(path):
     for filename_i, filename_xyz in zip(os.listdir(intensity_path), os.listdir(xyz_path)):
         frame_intensity = cv2.imread(os.path.join(intensity_path, filename_i))
         frame_xyz = read_single_xyz_raw_file(os.path.join(xyz_path, filename_xyz))
-        key_points, frame_with_key_points = annotate_single_frame(frame=frame_intensity, bg=True, frame_xyz=frame_xyz)
+        key_points, frame_with_key_points = annotate_single_frame(crop, frame=frame_intensity, bg=True, frame_xyz=frame_xyz)
         cv2.imwrite(annotated_frame_path + 'annotated_frame%d.jpg' % i, frame_with_key_points)
         file = open(landmark_path + 'frame%d_landmarks.txt' % i, 'w+')
         for point in key_points:
@@ -131,8 +131,8 @@ def remove_bg(frame, frame_xyz):
 
     return processed_frame
 
-def preprocess(image, w1=800, w2=1400, h1=350, h2=850):
-
+def preprocess(image, crop):
+    (w1, w2, h1, h2) = crop
     # removing the background
     # image = remove_bg(image, xyz)
 

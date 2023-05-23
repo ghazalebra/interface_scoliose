@@ -75,12 +75,12 @@ def copy_xyz_frames(src_path, des_path):
             # print(file_path, save_file_path)
             shutil.copy(file_path, save_file_path)
 
-def write_xyz_coordinates(folder_path, dict_coordo):
+def write_xyz_coordinates(folder_path, dict_coordo, crop):
     xyz_path = folder_path + '/xyz/'
     for filename in os.listdir(xyz_path):
         marqueurs = dict_coordo[f'image{int(filename[19:-4])+1}']
         # trouve les coordonnées associées aux marqueurs détectés
-        coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs)
+        coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs, crop)
         # removes the '.raw' extension from the end of the filename and replaces it with '.png'
         csv_filename = folder_path + '/XYZ_converted/' + filename[:-4] + '.csv'
         with open(csv_filename, 'w', newline='') as csvfile:
@@ -88,7 +88,7 @@ def write_xyz_coordinates(folder_path, dict_coordo):
             for c in coordos:
                 writer.writerow(c)
 
-def find_xyz_coordinates(file_path, marqueurs):
+def find_xyz_coordinates(file_path, marqueurs, crop):
     # the image dimensions
     w = 1936
     h = 1176
@@ -97,20 +97,41 @@ def find_xyz_coordinates(file_path, marqueurs):
         f.seek(header_size)
         data_array = np.fromfile(f, np.float32).reshape((h,w,3))
     #retrieve the depth as an image (and flip upside down)
+    (w1, w2, h1, h2) = crop
     x_array = data_array[:, :,0].T
-    x_array = x_array[-1:0:-1, :][800:1400, 350:850]
+    x_array = x_array[-1:0:-1, :][w1:w2, h1:h2]
     y_array = data_array[:, :,1].T
-    y_array = y_array[-1:0:-1, :][800:1400, 350:850]
+    y_array = y_array[-1:0:-1, :][w1:w2, h1:h2]
     z_array = data_array[:, :,2].T
-    z_array = z_array[-1:0:-1, :][800:1400, 350:850]
+    z_array = z_array[-1:0:-1, :][w1:w2, h1:h2]
 
     coordos = []
     for el in marqueurs:
         x = (x_array[round(el[1]),round(el[0])])
         y = (y_array[round(el[1]),round(el[0])])
         z = (z_array[round(el[1]),round(el[0])])
+
+        i = -2
+        while [x,y,z] == [0.0, 0.0, 0.0]:
+            print(i)
+            x = (x_array[round(el[1]+i),round(el[0]+i)])
+            print(x)
+            y = (y_array[round(el[1]+i),round(el[0]+i)])
+            print(y)
+            z = (z_array[round(el[1]+i),round(el[0]+i)])
+            print(z)
+            i += 1
+
         coordos.append([x, y, z]) #liste de 5 listes contenant les coordos (x,y,z) pour chaque marqueur
+
     return coordos
+
+path = r'D:\StageE23\Data\Ete_2022\Participant01\autocorrection\Prise01\xyz\auto_01_014782_XYZ_14.raw'
+marqueurs = [[287.1146545410156, 257.74810791015625], [221.3672637939453, 447.0311279296875], [344.5993347167969, 435.803466796875],
+             [284.0673828125, 515.9281005859375], [290.02099609375, 606.6080322265625]]
+crop = (600, 1320, 300, 900)
+find_xyz_coordinates(path, marqueurs, crop)
+
 '''
 path_variants = ['autocorrection/Prise01', 'autocorrection/Prise02']
 # path_variants = ['BG/Libre/Prise02']
@@ -152,6 +173,3 @@ for i in tqdm(range(1, 15)):
             # print(save_path)
     
 '''
-
-
-
