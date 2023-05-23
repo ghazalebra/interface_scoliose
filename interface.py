@@ -12,11 +12,11 @@ import csv
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import splev, splrep
+from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+
 import time
 
-from scipy.interpolate.fitpack import splev, splrep
-from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 import read_raw_file as RRF
 import marker_detection
 
@@ -28,13 +28,12 @@ class MyApp(Widget):
 
     global path
     path = ''
-    global analyse_eff
-    analyse_eff = False
-    global detection_eff
-    detection_eff = False
-    global labelize_extent
-    labelize_extent = False
+    
+    # Choix des paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
+    global crop
+    crop = (600, 1320, 300, 900)
 
+    # Fonction pour que les boutons changent de couleur lorsqu'enfoncés
     def press_color(self):
         self.background_normal = ''
         self.background_color = (100/255.0, 197/255.0, 209/255.0, 1)
@@ -44,12 +43,26 @@ class MyApp(Widget):
         print(self.width, self.height)
         timer_debut_im = time.process_time_ns()
         
+        # flag pour savoir quelles infos sont disponibles
+        global analyse_eff
+        analyse_eff = False
+        global detection_eff
+        detection_eff = False
+        global labelize_extent
+        labelize_extent = False
+
+        # Initie la variable pour numéro de l'image affichée à 1 pour voir la première image
+        global image_nb
+        image_nb = 1
+
+        # chemins général/spécifiques vers les données de base/créées
         global path
         path = self.ids.path_input.text
         save_path = path+'/intensity/'
         save_path_xyz = path+'/xyz/'
         global save_path_im
         save_path_im = path+'/Preprocessed'
+
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
             if not 'intensity' in os.listdir(path):
@@ -60,19 +73,21 @@ class MyApp(Widget):
                 os.mkdir(save_path_xyz)
             if not 'Preprocessed' in os.listdir(path):
                 os.mkdir(save_path_im, )
+            # lit es fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
+            # crée les images Preprocessed pour consultation
             if len(os.listdir(save_path_im)) == 0:
                 for name in os.listdir(save_path):
-                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)))
+                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)), crop)
                     cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
+
             if len(os.listdir(save_path_xyz)) == 0:
                 RRF.copy_xyz_frames(path, save_path_xyz)
 
             # Trouve le nombre d'images, définit le max du slider et le texte /tot
             global images_total
             images_total = len(os.listdir(save_path))
-
             self.ids.slider.max = images_total
             self.ids.image_total.text = f'/{images_total}'
             self.ids.label_ready.text = "Images prêtes, bougez le curseur ou entrez un numéro d'image"
@@ -80,18 +95,17 @@ class MyApp(Widget):
             # Initie les variables pour dictionnaire de coordonnées et flag analyse_eff (pour affichage x,y,z)
             global dict_coordo
             dict_coordo = {}
+            global dict_coordo_labels_manual
+            dict_coordo_labels_manual = {}
             
             # Lance la détection des marqueurs
             self.detect_marqueurs()
 
-            # Initie la variable pour numéro de l'image affichée à 1 pour voir la première image
-            global image_nb
-            image_nb = 1
             self.show_image()
 
             timer_fin_im = time.process_time_ns()
             print(timer_debut_im, timer_fin_im)
-            print(f'Temps création + affichage images : {timer_fin_im - timer_debut_im}')
+            print(f'Temps création + affichage images : {timer_fin_im - timer_debut_im} ns')
 
         except FileNotFoundError:
             self.ids.label_ready.text = "Le chemin entré est introuvable. Essayez à nouveau."
@@ -157,6 +171,9 @@ class MyApp(Widget):
         # Affiche les marqueurs si bouton activé
         if self.ids.button_showmarks.state == 'down':
             self.show_marqueurs()
+        # Affiche les numéros d'images n'ayant pas le bon nb de marqueurs si bouton activé
+        if self.ids.button_verif_nb.state == 'down':
+            self.verif_nb()
         # Tag marqueurs discontinus si présents dans l'image actuelle
         if self.ids.button_verif_continuity.state == 'down':
             im_prob_continuity = self.verif_continuity()
@@ -213,38 +230,39 @@ class MyApp(Widget):
         
         if len(path) > 1:
             # Détection avec algo si mode Nouveau
-            if self.ids.check_new.state == 'down' and len(os.listdir(path+'/landmarks/')) == 0:
-                marker_detection.annotate_frames(path)
-            #i = 0
-            for filename in os.listdir(path+'/landmarks/'):
+            if not 'annotated_frames' in os.listdir(path):
+                os.mkdir(path+'/annotated_frames/')
+            if len(os.listdir(path+'/annotated_frames/')) == 0 or self.ids.check_new.state == 'down':
+                marker_detection.annotate_frames(path, crop)
+
+            # Recrée le dictionnaire de coordonnées à partir des fichiers de landmarks
+            for filename in os.listdir(path+'/landmarks/') :
                 coordinates = []
                 keypoints = []
-                # image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
                 with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
                     for line in f.readlines():
                         keypoints.append(line.split(' '))
-                
                 for n in range(len(keypoints)):
                     coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
                     coordinates.append(coordo_xy)
                 i = int(filename[5:-14])
                 dict_coordo[f'image{i+1}'] = coordinates
-                #i += 1
-            #self.labelize()
+            
             detection_eff = True
         
-        # Détection avec algo si mode Nouveau
-            # if self.ids.check_new.state == 'down':
-            #     for i in range(images_total):
-            #         coordinates = []
-            #         image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
-            #         keypoints = marker_detection.detect_markers(image)
-            #         for n in range(len(keypoints)):
-            #             coordo_xy = [keypoints[n].pt[0], keypoints[n].pt[1]]
-            #             coordinates.append(coordo_xy)
-            #         dict_coordo[f'image{i+1}'] = coordinates
-            #     self.labelize()
-            #     detection_eff = True
+        """ Détection avec algo si mode Nouveau
+            if self.ids.check_new.state == 'down':
+                for i in range(images_total):
+                    coordinates = []
+                    image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
+                    keypoints = marker_detection.detect_markers(image)
+                    for n in range(len(keypoints)):
+                        coordo_xy = [keypoints[n].pt[0], keypoints[n].pt[1]]
+                        coordinates.append(coordo_xy)
+                    dict_coordo[f'image{i+1}'] = coordinates
+                self.labelize()
+                detection_eff = True """
+
         global im_dim
         im_dim = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[0])).shape
 
@@ -252,7 +270,8 @@ class MyApp(Widget):
         if self.ids.check_open.state == 'down':
             global analyse_eff
             analyse_eff = 'Metriques' in os.listdir(path+'') #Analyse effectuée (et utilisable) si métriques enregistrées
-            if 'Positions' in os.listdir(path+''):
+            
+            if 'Positions' in os.listdir(path):
                 # Recrée dictionnaire de positions avec labels
                 global dict_coordo_labels_manual
                 jsonfile = open(path+'/Positions/positions_corrigees.json')
@@ -266,40 +285,47 @@ class MyApp(Widget):
                 labels = dict_coordo_labels_manual['image1'].keys()
 
                 global nb_marqueurs
-                nb_marqueurs = len(dict_coordo_labels_manual[f'image1'])
+                nb_marqueurs = len(dict_coordo_labels_manual['image1'])
                 self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs)
                 self.ids.grid.rows = 1 + nb_marqueurs
-                
-                self.coordo_xyz_marqueurs()
+
+                detection_eff = True
+
+                if 'coordonnees_xyz.csv' in os.listdir(path+'/Positions/'):
+                # Recrée le dictionnaire de coordonnées x,y,z
+                    global dict_coordo_xyz_labels
+                    dict_coordo_xyz_labels = {}
+                    with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
+                        reader = csv.reader(csvfile, delimiter=';')
+                        j = 0
+                        for row in reader: #skip headline
+                            if j == 0:
+                                entete = row[1::3]
+                                labels_xyz = [e[:-2] for e in entete]
+                                print(labels_xyz)
+                            elif j > 0:
+                                key = f'image{row[0]}'
+                                dict_coordo_xyz_labels.update({key: {}})
+                                row = [float(i) for i in row[1:]]
+                                i = 0
+                                for l in labels_xyz:
+                                    dict_coordo_xyz_labels[key].update({l : [row[i], row[i+1], row[i+2]]})
+                                    i += 3
+                            j += 1
+                        print(dict_coordo_xyz_labels)
+                else:
+                    self.coordo_xyz_marqueurs()
+
                 self.analyse()
-                """ # Recrée dictionnaire de coordonnées x,y,z
-                global dict_coordo_xyz_labels
-                dict_coordo_xyz_labels = {}
-                with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
-                    reader = csv.reader(csvfile, delimiter=';')
-                    next(reader)
-                    for row in reader: #skip headline
-                        key = f'image{row[0]}'
-                        row = [float(i) for i in row[1:]]
-                        C7 = [row[0], row[1], row[2]]
-                        G = [row[3], row[4], row[5]]
-                        D = [row[6], row[7], row[8]]
-                        T = [row[9], row[10], row[11]]
-                        L = [row[12], row[13], row[14]]
-                        dict_coordo_xyz_labels.update({key: {'C7':C7, 'G':G, 'D':D, 'T':T, 'L':L}})
-            detection_eff = True """
 
         timer_fin_detection = time.process_time_ns()
         print(timer_debut_detection, timer_fin_detection)
-        print(f'Temps détection des marqueurs :{timer_fin_detection - timer_debut_detection}')
+        print(f'Temps détection des marqueurs :{timer_fin_detection - timer_debut_detection} ns')
 
-    # Fonction pour afficher les marqueurs de l'image actuelle
+    # Fonction pour afficher les marqueurs sur l'image actuelle
     def show_marqueurs(self):
         # Affichage des marqueurs si bouton activé
         if detection_eff == True:
-            # key_points = detect_markers(preprocessed_frame)
-            # im_with_key_points = cv2.drawKeypoints(frame_display, key_points, np.array([]), (0, 255, 0),
-            #                                cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
             for coordinates in dict_coordo[f'image{image_nb}']:
                 x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
                 y = 0.85 - (coordinates[1]/im_dim[0])*0.78
@@ -366,8 +392,6 @@ class MyApp(Widget):
                         if labelize_extent == True:
                             self.extend_labelisation()
                         #self.labelize()
-                        if self.ids.button_verif_nb.state == 'down':
-                            self.verif_nb()
                         if self.ids.button_verif_continuity.state == 'down':
                             self.verif_continuity()
                         self.show_image()
@@ -375,7 +399,7 @@ class MyApp(Widget):
                         break
                     else:
                         add_m = True
-                if add_m:
+                if add_m or len(dict_coordo[f'image{image_nb}']) == 0:
                         self.add_marqueur(m_pos)
             else:
                 pass
@@ -390,10 +414,6 @@ class MyApp(Widget):
             Ellipse(pos=(x - d/2, y - d/2), size=(d, d), group=u"new_mark")
         dict_coordo[f'image{image_nb}'].append([m_pos[0], m_pos[1]])
         
-        if self.ids.button_verif_nb.state == 'down':
-            self.verif_nb()
-        if self.ids.button_verif_continuity.state == 'down':
-            self.verif_continuity()
         #self.labelize()
         if labelize_extent == True:
             self.extend_labelisation()
@@ -405,10 +425,6 @@ class MyApp(Widget):
             for c in dict_coordo[im]:
                 if c not in dict_coordo_labels_manual[im].values():
                     dict_coordo[im].remove(c)
-        if self.ids.button_verif_nb.state == 'down':
-            self.verif_nb()
-        if self.ids.button_verif_continuity.state == 'down':
-            self.verif_continuity()
         self.show_image()
 
     # Ajoute des marqueurs manquants selon les splines d'interpolation
@@ -423,6 +439,7 @@ class MyApp(Widget):
                     if c == [np.nan, np.nan]:
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
+                        # Modification des marqueurs loin de leur courbe d'inteprolation
                     """ if abs(c[0] - c_interpolate[0]) > 5 and abs(c[1] - c_interpolate[1]) > 5:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
@@ -437,8 +454,6 @@ class MyApp(Widget):
                 y = (dict_coordo_labels1[f'image{im+1}'][m_manquant][1] + dict_coordo_labels1[f'image{im-1}'][m_manquant][1])/2
                 dict_coordo[f'image{im}'].append([x,y]) #ajout marqueur par interpolation linéaire avec images précédente et suivante
         '''
-        if self.ids.button_verif_nb.state == 'down':
-            self.verif_nb()
         #self.labelize()
         self.show_image()
     
@@ -530,9 +545,6 @@ class MyApp(Widget):
                     plot_y = [c[m][1] for c in dict_coordo_labels_manual.values()]
                 except KeyError:
                     continue
-                """ for coordo in dict_coordo_labels_manual.values():
-                    plot_x.append(coordo[m][0])
-                    plot_y.append(coordo[m][1]) """
                 ax1.scatter(xaxis, plot_x, s=2, label=m, c=color)
                 ax1.plot(xaxis, splines_smooth[m][0], c=color)
                 ax2.scatter(xaxis, plot_y, s=2, label=m, c=color)
@@ -589,9 +601,6 @@ class MyApp(Widget):
                         break   
         else:
             pass
-    
-    global dict_coordo_labels_manual
-    dict_coordo_labels_manual = {}
 
     def label_in(self):
         label = self.ids.label_input.text
@@ -616,10 +625,7 @@ class MyApp(Widget):
         
         if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
             global labels
-            labels = []
-            for l in dict_coordo_labels_manual[f'image{image_nb}'].keys():
-                labels.append(l)
-                c = dict_coordo_labels_manual[f'image{image_nb}'][l]
+            labels = list(dict_coordo_labels_manual[f'image{image_nb}'].keys())
             
             self.extend_labelisation()
     
@@ -662,7 +668,7 @@ class MyApp(Widget):
         for key in dict_coordo_labels_manual.keys():
             dict_coordo[key] = list(dict_coordo_labels_manual[key].values())
 
-        RRF.write_xyz_coordinates(path, dict_coordo)
+        RRF.write_xyz_coordinates(path, dict_coordo, crop)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
         for filename in os.listdir(save_xyz):
             key = f'image{int(filename[19:-4])+1}'
@@ -673,9 +679,9 @@ class MyApp(Widget):
                     row = [float(i) for i in row]
                     dict_coordo_xyz[key].append([row[1], row[0], row[2]])
 
-        print(dict_coordo)
-        print(dict_coordo_labels_manual)
-        print(dict_coordo_xyz)
+        #print(dict_coordo)
+        #print(dict_coordo_labels_manual)
+        #print(dict_coordo_xyz)
     
     # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
@@ -718,13 +724,14 @@ class MyApp(Widget):
         if len(im_prob_nb) == 0 and self.ids.button_analyze.state == 'down':
             global analyse_eff
             analyse_eff = True
-            self.coordo_xyz_marqueurs()
-            if nb_marqueurs == 5:
-                self.labelize_5()
-            if nb_marqueurs == 8:
-                self.labelize_8()
+            if self.ids.check_new.state == 'down':
+                self.coordo_xyz_marqueurs()
+                if nb_marqueurs == 5:
+                    self.labelize_5()
+                if nb_marqueurs == 8:
+                    self.labelize_8()
             print(dict_coordo_xyz_labels)
-            if self.ids.button_analyze.state == 'down':
+            if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': [], 'angle_rachis': [], 'var_rachis': []}
                 # Calcul des métriques d'analyse et ajout au dictionnaire de métriques
@@ -772,10 +779,10 @@ class MyApp(Widget):
             self.ids.graph.clear_widgets()
 
         self.show_image()
-        
+
         timer_fin_analyse = time.process_time_ns()
         print(timer_debut_analyse, timer_fin_analyse)
-        print(f'Temps calcul des métriques + graphiques :{timer_fin_analyse - timer_debut_analyse}')
+        print(f'Temps calcul des métriques + graphiques :{timer_fin_analyse - timer_debut_analyse} ns')
               
     # Calcule le score d'une métrique pour une image selon toutes les métriques de cette catégorie
     def map_metriques(self, m, metriques):
@@ -856,7 +863,7 @@ class MyApp(Widget):
             pass
         timer_fin_save = time.process_time_ns()
         print(timer_debut_save, timer_fin_save)
-        print(f'Temps sauvegarde :{timer_fin_save - timer_debut_save}')
+        print(f'Temps sauvegarde :{timer_fin_save - timer_debut_save} ns')
     
     # Crée un csv et y écrit les coordonnées x,y,z des 5 marqueurs selon le numéro de l'image
     def save_positions(self):
@@ -870,14 +877,16 @@ class MyApp(Widget):
         save_pos = path+'/Positions'
         with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow(['image no', 'C7 x', 'C7 y', 'C7 z', 'G x', 'G y', 'G z', 'D x', 'D y', 'D z',
-                             'T x', 'T y', 'T z', 'L x', 'L y', 'L z'])
+            entete = ['image no']
+            for l in dict_coordo_xyz_labels['image1'].keys():
+                entete += [f'{l} x', f'{l} y', f'{l} z']
+            writer.writerow(entete)
             for im, coordos in dict_coordo_xyz_labels.items():
-                writer.writerow([im[5:], coordos['C7'][0], coordos['C7'][1], coordos['C7'][2],
-                                        coordos['G'][0], coordos['G'][1], coordos['G'][2],
-                                        coordos['D'][0], coordos['D'][1], coordos['D'][2],
-                                        coordos['T'][0], coordos['T'][1], coordos['T'][2],
-                                        coordos['L'][0], coordos['L'][1], coordos['L'][2]])
+                row = [im[5:]]
+                for l in dict_coordo_xyz_labels['image1'].keys():
+                    row += [coordos[l][0], coordos[l][1], coordos[l][2]]
+                writer.writerow(row)
+
         save_met = path+'/Metriques/metriques.csv'
         with open(save_met, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
