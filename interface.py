@@ -13,6 +13,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splev, splrep
+from scipy.ndimage import gaussian_filter1d
 from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 
 import time
@@ -32,6 +33,9 @@ class MyApp(Widget):
     # Choix des paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
     global crop
     crop = (600, 1320, 300, 900)
+    def size_text(self):
+        self.ids.width.text = f'({crop[3]-crop[2]}, 0)'
+        self.ids.height.text = f'(0, {crop[1]-crop[0]})'
 
     # Fonction pour que les boutons changent de couleur lorsqu'enfoncés
     def press_color(self):
@@ -232,7 +236,7 @@ class MyApp(Widget):
             # Détection avec algo si mode Nouveau
             if not 'annotated_frames' in os.listdir(path):
                 os.mkdir(path+'/annotated_frames/')
-            if len(os.listdir(path+'/annotated_frames/')) == 0 or self.ids.check_new.state == 'down':
+            if len(os.listdir(path+'/annotated_frames/')) == 0: #or self.ids.check_new.state == 'down':
                 marker_detection.annotate_frames(path, crop)
 
             # Recrée le dictionnaire de coordonnées à partir des fichiers de landmarks
@@ -439,11 +443,11 @@ class MyApp(Widget):
                     if c == [np.nan, np.nan]:
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
-                        # Modification des marqueurs loin de leur courbe d'inteprolation
-                    """ if abs(c[0] - c_interpolate[0]) > 5 and abs(c[1] - c_interpolate[1]) > 5:
+                    # Modification des marqueurs loin de leur courbe d'inteprolation
+                    if abs(c[0] - c_interpolate[0]) > 5 and abs(c[1] - c_interpolate[1]) > 5:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
-                        dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate """
+                        dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
         '''
         # ajout par position moyenne sur les images précédente et suivante
         for im, nb in im_prob_nb:
@@ -492,7 +496,7 @@ class MyApp(Widget):
                 if not math.isnan(c[0]):
                     y[l][0].append(c[0])
                     y[l][1].append(c[1])
-                    x[l].append(im[5:])
+                    x[l].append(int(im[5:]))
 
         for l in labels:
             m = len(x[l])
@@ -501,34 +505,14 @@ class MyApp(Widget):
             #w[0] = 5
             #w[-1] = 5
             if m > 7:
+                print(y[l][0], type(y[l][0][0]))
+                y[l][0] = gaussian_filter1d(y[l][0], 3)
+                y[l][1] = gaussian_filter1d(y[l][1], 3)
+
                 spl[l][0] = splrep(x[l], y[l][0], w, k=3, s=sm/4)
                 spl[l][1] = splrep(x[l], y[l][1], w, k=3, s=sm/4)
                 splines_smooth[l][0] = splev(x_axis, spl[l][0], ext=3)
-                splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)
-        
-        """ if not 'interpolate' in os.listdir(path):
-            os.mkdir(path+ '/interpolate/')
-        fig, (ax1, ax2, ax3) = plt.subplots(1,3)
-        ax1.plot(x_axis, splines_smooth['G'][0], label=f'G x smooth')
-        ax1.legend()
-        ax2.plot(x_axis, splines_smooth['D'][0], label=f'D x smooth')
-        ax2.legend()
-        for l in ['C', 'T', 'L']:
-            ax3.plot(x_axis, splines_smooth[l][0], label=f'{l} x smooth')
-        ax3.legend()
-        plt.savefig(path+'/interpolate/smoothing_a_s.png')
-        plt.close() 
-
-        fig, (ax4, ax5, ax6) = plt.subplots(1,3)
-        ax4.plot(x_axis, splines_smooth['C'][0], label=f'C Y smooth')
-        ax4.legend()
-        ax5.plot(x_axis, splines_smooth['L'][0], label=f'L Y smooth')
-        ax5.legend()
-        for l in ['G', 'D', 'C']:
-            ax6.plot(x_axis, splines_smooth[l][0], label=f'{l} Y smooth')
-        ax6.legend()
-        plt.savefig(path+'/interpolate/smoothing_b_s.png')
-        plt.close()  """       
+                splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)   
 
         return splines_smooth
 
@@ -538,7 +522,7 @@ class MyApp(Widget):
             xaxis = range(1, images_total+1)
             splines_smooth = self.interpolate_spline()
             fig, (ax1, ax2) = plt.subplots(2,1)
-            colors = ['tab:orange', 'tab:red', 'tab:green', 'k', 'tab:blue', 'tab:purple', 'y', 'c']
+            colors = ['tab:orange', 'tab:red', 'tab:green', 'k', 'tab:blue', 'tab:purple', 'y', 'c', 'tab:gray', 'tab:pink']
             for m, color in zip(labels, colors[0:nb_marqueurs]):
                 try:
                     plot_x = [c[m][0] for c in dict_coordo_labels_manual.values()]
@@ -608,7 +592,7 @@ class MyApp(Widget):
         self.canvas.remove_group(u"label")
         global dict_coordo_labels_manual
         if f'image{image_nb}' in dict_coordo_labels_manual.keys():
-            if label not in dict_coordo_labels_manual[f'image{image_nb}']:
+            if label not in dict_coordo_labels_manual[f'image{image_nb}'] and m_to_label not in dict_coordo_labels_manual[f'image{image_nb}'].values():
                 dict_coordo_labels_manual[f'image{image_nb}'].update({label : m_to_label})
             else:
                 dict_coordo_labels_manual[f'image{image_nb}'][label] = m_to_label
@@ -637,6 +621,7 @@ class MyApp(Widget):
             if im not in dict_coordo_labels_manual:
                 dict_coordo_labels_manual.update({im:{}})
             for label in dict_coordo_labels_manual['image1'].keys():
+                ref_prec = [0,0]
                 if label in dict_coordo_labels_manual[im] and dict_coordo_labels_manual[im][label] != [np.nan, np.nan]:
                     continue
                 else:
@@ -644,16 +629,32 @@ class MyApp(Widget):
                     while i < num:
                         if label in dict_coordo_labels_manual[f'image{num-i}'] and dict_coordo_labels_manual[f'image{num-i}'][label] != [np.nan, np.nan]:
                             ref = dict_coordo_labels_manual[f'image{num-i}'][label]
+                            if num > 2:
+                                j = i+1
+                                print(j)
+                                while j <= (num-i):
+                                    if label in dict_coordo_labels_manual[f'image{num-j}'] and dict_coordo_labels_manual[f'image{num-j}'][label] != [np.nan, np.nan]:
+                                        ref_prec = dict_coordo_labels_manual[f'image{num-j}'][label]
+                                        print(ref)
+                                        print(ref_prec)
+                                        break
+                                    else:
+                                        j += 1
                             break
                         else:
                             i += 1
-                    for coordos in dict_coordo[im]:                        
-                        if abs(coordos[0] - ref[0]) < 25 and abs(coordos[1] - ref[1]) < 10:
+
+                    for coordos in dict_coordo[im]:
+                        if abs(coordos[0] - ref[0]) < 15 and abs(coordos[1] - ref[1]) < 10:
                             dict_coordo_labels_manual[im][label] = coordos
+                            break
+                        elif ref_prec != [0,0] and abs(coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 7 and abs(coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)-ref[1])) < 7:
+                            dict_coordo_labels_manual[im][label] = coordos
+                            print(coordos)
                             break
                         else:
                             dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
-
+                        
 
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
@@ -724,11 +725,11 @@ class MyApp(Widget):
         if len(im_prob_nb) == 0 and self.ids.button_analyze.state == 'down':
             global analyse_eff
             analyse_eff = True
-            if self.ids.check_new.state == 'down':
+            if self.ids.check_new.state == 'down' or 'coordonnees_xyz.csv' not in os.listdir(path+'/Positions/'):
                 self.coordo_xyz_marqueurs()
-                if nb_marqueurs == 5:
+                if nb_marqueurs in [5, 6]:
                     self.labelize_5()
-                if nb_marqueurs == 8:
+                if nb_marqueurs in [8, 9]:
                     self.labelize_8()
             print(dict_coordo_xyz_labels)
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
