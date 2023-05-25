@@ -78,7 +78,8 @@ def copy_xyz_frames(src_path, des_path):
 def write_xyz_coordinates(folder_path, dict_coordo, crop):
     xyz_path = folder_path + '/xyz/'
     for filename in os.listdir(xyz_path):
-        marqueurs = dict_coordo[f'image{int(filename[19:-4])+1}']
+        i = filename.index('XYZ')+4
+        marqueurs = dict_coordo[f'image{int(filename[i:-4])+1}']
         # trouve les coordonnées associées aux marqueurs détectés
         coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs, crop)
         # removes the '.raw' extension from the end of the filename and replaces it with '.png'
