@@ -13,7 +13,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splev, splrep
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, median_filter
 from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 
 import time
@@ -29,13 +29,6 @@ class MyApp(Widget):
 
     global path
     path = ''
-    
-    # Choix des paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
-    global crop
-    crop = (600, 1320, 300, 900)
-    def size_text(self):
-        self.ids.width.text = f'({crop[3]-crop[2]}, 0)'
-        self.ids.height.text = f'(0, {crop[1]-crop[0]})'
 
     # Fonction pour que les boutons changent de couleur lorsqu'enfoncés
     def press_color(self):
@@ -80,6 +73,8 @@ class MyApp(Widget):
             # lit es fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
+            self.automatic_crop()
+
             # crée les images Preprocessed pour consultation
             if len(os.listdir(save_path_im)) == 0:
                 for name in os.listdir(save_path):
@@ -102,9 +97,10 @@ class MyApp(Widget):
             global dict_coordo_labels_manual
             dict_coordo_labels_manual = {}
             
+
             # Lance la détection des marqueurs
             self.detect_marqueurs()
-
+            
             self.show_image()
 
             timer_fin_im = time.process_time_ns()
@@ -113,6 +109,39 @@ class MyApp(Widget):
 
         except FileNotFoundError:
             self.ids.label_ready.text = "Le chemin entré est introuvable. Essayez à nouveau."
+
+    # Trouve les paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
+    def automatic_crop(self):
+        path_nobg = path+'/xyz_nobg/'
+        if not 'xyz_nobg' in os.listdir(path):
+            os.mkdir(path_nobg)
+            RRF.read_raw_xyz_frames(path, path_nobg)
+
+        z_nobg = cv2.imread(os.path.join(path_nobg, os.listdir(path_nobg)[0]))
+        z_nobg = median_filter(z_nobg, 5)
+        body = np.argwhere(z_nobg[:1500,:,0] > 100)
+        top = body[0]
+        body_sorted = sorted(body, key=lambda list: list[1])
+
+        left = body_sorted[0]
+        right = body_sorted[-1]
+        print(top, left, right)
+
+        if 'BG' in os.listdir(path_nobg)[0]:
+            w1 = left[1]-75
+        elif 'BD' in os.listdir(path_nobg)[0]:
+            w1 = left[1]+25
+        else:
+            w1 = left[1]-25
+        w2 = w1+500
+        h1 = top[0]+200
+        h2 = top[0]+800
+
+        global crop
+        crop = (w1, w2, h1, h2)
+
+        self.ids.width.text = f'({w2-w1}, 0)'
+        self.ids.height.text = f'(0, {h2-h1})'
 
     def nb_marqueurs_input(self):
         global nb_marqueurs
@@ -366,9 +395,9 @@ class MyApp(Widget):
                 for n in range(len(txt)):
                     if txt[n]==',':
                         count+=1
-                        if count == 14:
+                        if count == 20:
                             txt_multiline = txt[:n+1] + '\n' + txt[n+2:]
-                        if count > 14 and count%14 == 0:
+                        if count > 20 and count%20 == 0:
                             txt_multiline = txt_multiline[:n+1] + '\n' + txt_multiline[n+2:]
                 if len(txt_multiline) > 1:
                     self.ids.im_prob_nb.text = txt_multiline[:-2]
@@ -444,10 +473,11 @@ class MyApp(Widget):
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
                     # Modification des marqueurs loin de leur courbe d'inteprolation
-                    if abs(c[0] - c_interpolate[0]) > 5 and abs(c[1] - c_interpolate[1]) > 5:
+                    if abs(c[0] - c_interpolate[0]) > 5 or abs(c[1] - c_interpolate[1]) > 5:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
+                        print('modif interpolation')
         '''
         # ajout par position moyenne sur les images précédente et suivante
         for im, nb in im_prob_nb:
@@ -501,16 +531,14 @@ class MyApp(Widget):
         for l in labels:
             m = len(x[l])
             sm = m-math.sqrt(2*m)
-            w = np.ones(m) #poids de 1 à tous les points
-            #w[0] = 5
-            #w[-1] = 5
+            #w = np.ones(m) #poids de 1 à tous les points
             if m > 7:
                 print(y[l][0], type(y[l][0][0]))
                 y[l][0] = gaussian_filter1d(y[l][0], 3)
                 y[l][1] = gaussian_filter1d(y[l][1], 3)
 
-                spl[l][0] = splrep(x[l], y[l][0], w, k=3, s=sm/4)
-                spl[l][1] = splrep(x[l], y[l][1], w, k=3, s=sm/4)
+                spl[l][0] = splrep(x[l], y[l][0], k=3)
+                spl[l][1] = splrep(x[l], y[l][1], k=3)
                 splines_smooth[l][0] = splev(x_axis, spl[l][0], ext=3)
                 splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)   
 
@@ -631,12 +659,9 @@ class MyApp(Widget):
                             ref = dict_coordo_labels_manual[f'image{num-i}'][label]
                             if num > 2:
                                 j = i+1
-                                print(j)
                                 while j <= (num-i):
                                     if label in dict_coordo_labels_manual[f'image{num-j}'] and dict_coordo_labels_manual[f'image{num-j}'][label] != [np.nan, np.nan]:
                                         ref_prec = dict_coordo_labels_manual[f'image{num-j}'][label]
-                                        print(ref)
-                                        print(ref_prec)
                                         break
                                     else:
                                         j += 1
@@ -645,16 +670,18 @@ class MyApp(Widget):
                             i += 1
 
                     for coordos in dict_coordo[im]:
-                        if abs(coordos[0] - ref[0]) < 15 and abs(coordos[1] - ref[1]) < 10:
-                            dict_coordo_labels_manual[im][label] = coordos
+                        if abs(coordos[0] - ref[0]) < 12 and abs(coordos[1] - ref[1]) < 10:
+                            print('position')
+                            dict_coordo_labels_manual[im][label] = coordos                            
                             break
-                        elif ref_prec != [0,0] and abs(coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 7 and abs(coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)-ref[1])) < 7:
+                        elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)+ref[1])) < 9:
                             dict_coordo_labels_manual[im][label] = coordos
-                            print(coordos)
+                            print('derivée')
                             break
                         else:
                             dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
                         
+                
 
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
@@ -672,7 +699,8 @@ class MyApp(Widget):
         RRF.write_xyz_coordinates(path, dict_coordo, crop)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
         for filename in os.listdir(save_xyz):
-            key = f'image{int(filename[19:-4])+1}'
+            index_XYZ = filename.find('_XYZ') + 5
+            key = f'image{int(filename[index_XYZ:-4])+1}'
             with open(os.path.join(save_xyz, filename), newline='') as csvfile:
                 reader = csv.reader(csvfile, delimiter=';')
                 dict_coordo_xyz.update({key : []})
@@ -692,12 +720,12 @@ class MyApp(Widget):
         for im, coordos in dict_coordo_xyz.items():
             coordos_sorted_x = sorted(coordos, key=lambda tup: tup[0])
             dict_coordo_xyz_labels.update({im: {'G': coordos_sorted_x[0]}}) #plus petite valeur en x = gauche
-            dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[4]}) #plus grande valeur en x = droite
+            dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
             del coordos_sorted_x[0]
             del coordos_sorted_x[-1]
             coordos_sorted_y = sorted(coordos_sorted_x, key=lambda tup: tup[1])
-            dict_coordo_xyz_labels[im].update({'C7': coordos_sorted_y[2]}) #plus grande valeur en y = C7
-            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[1]})
+            dict_coordo_xyz_labels[im].update({'C7': coordos_sorted_y[-1]}) #plus grande valeur en y = C7
+            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[-2]})
             dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[0]})
     
     def labelize_8(self):
@@ -731,7 +759,6 @@ class MyApp(Widget):
                     self.labelize_5()
                 if nb_marqueurs in [8, 9]:
                     self.labelize_8()
-            print(dict_coordo_xyz_labels)
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': [], 'angle_rachis': [], 'var_rachis': []}

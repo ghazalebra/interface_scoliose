@@ -5,7 +5,7 @@ import sys
 # import read_single_intensity_raw_file
 import csv
 from tqdm import tqdm
-
+import read_raw_file as RRF
 
 # the image dimensions
 w = 1936
@@ -137,9 +137,8 @@ def preprocess(image, crop):
     # image = remove_bg(image, xyz)
 
     # cropping the image
-    image = image[w1:w2, h1:h2, :]
+    image = image[h1:h2, w1:w2, :]
 
-    
 
     # The initial processing of the image
     # image = cv2.medianBlur(image, 3)
