@@ -139,7 +139,6 @@ def preprocess(image, crop):
     # cropping the image
     image = image[h1:h2, w1:w2, :]
 
-
     # The initial processing of the image
     # image = cv2.medianBlur(image, 3)
     image_bw = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.uint8)
@@ -166,16 +165,17 @@ def detect_markers(frame, params=None):
     params = cv2.SimpleBlobDetector_Params()
 
     params.minThreshold = 20
-    # params.maxThreshold = 255
+    #params.maxThreshold = 60
+    #params.thresholdStep = 20
 
     # Filter by Area.
     params.filterByArea = True
-    params.minArea = 50
-    # params.maxArea = 40
+    params.minArea = 78
+    params.maxArea = 310
     #
     # Filter by Circularity
-    # params.filterByCircularity = True
-    # params.minCircularity = 0.8
+    #params.filterByCircularity = True
+    #params.minCircularity = 0.8
     #
     # # Filter by Convexity
     # params.filterByConvexity = True
@@ -185,7 +185,7 @@ def detect_markers(frame, params=None):
     # params.filterByInertia = True
     # params.minInertiaRatio = 0.5
 
-    params.minDistBetweenBlobs = 50
+    params.minDistBetweenBlobs = 70
 
     detector = cv2.SimpleBlobDetector_create(params)
     key_points = detector.detect(frame)
