@@ -5,18 +5,18 @@ from kivy.lang import Builder
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, Ellipse
 from kivy.uix.label import Label
+from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+
 import os
 import json
 import cv2
 import csv
 import math
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splev, splrep
 from scipy.ndimage import gaussian_filter1d, median_filter
-from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
-
-import time
 
 import read_raw_file as RRF
 import marker_detection
@@ -62,17 +62,15 @@ class MyApp(Widget):
 
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
-            if not 'intensity' in os.listdir(path):
-                os.mkdir(save_path, )
-            if not 'landmarks' in os.listdir(path):
-                os.mkdir(path+'/landmarks/')
-            if not 'xyz' in os.listdir(path):
-                os.mkdir(save_path_xyz)
-            if not 'Preprocessed' in os.listdir(path):
-                os.mkdir(save_path_im, )
-            # lit es fichiers .raw si pas déjà fait et crée les images
+            os.makedirs(save_path, exist_ok=True)
+            os.makedirs(path+'/landmarks/', exist_ok=True)
+            os.makedirs(save_path_xyz, exist_ok=True)
+            os.makedirs(save_path_im, exist_ok=True)
+            # lit les fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
+            
+            # définit les dimensions pour rogner les images
             self.automatic_crop()
 
             # crée les images Preprocessed pour consultation
@@ -97,45 +95,49 @@ class MyApp(Widget):
             global dict_coordo_labels_manual
             dict_coordo_labels_manual = {}
             
-
-            # Lance la détection des marqueurs
+            # Lance la détection des marqueurs et affiche la 1re image
             self.detect_marqueurs()
-            
             self.show_image()
 
             timer_fin_im = time.process_time_ns()
             print(timer_debut_im, timer_fin_im)
-            print(f'Temps création + affichage images : {timer_fin_im - timer_debut_im} ns')
+            print(f'Temps création images + détection marqueurs : {timer_fin_im - timer_debut_im} ns')
 
         except FileNotFoundError:
             self.ids.label_ready.text = "Le chemin entré est introuvable. Essayez à nouveau."
 
     # Trouve les paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
     def automatic_crop(self):
+        timer_debut = time.process_time_ns()
+
         path_nobg = path+'/xyz_nobg/'
         if not 'xyz_nobg' in os.listdir(path):
             os.mkdir(path_nobg)
             RRF.read_raw_xyz_frames(path, path_nobg)
 
         z_nobg = cv2.imread(os.path.join(path_nobg, os.listdir(path_nobg)[0]))
-        z_nobg = median_filter(z_nobg, 5)
-        body = np.argwhere(z_nobg[:1500,:,0] > 100)
-        top = body[0]
-        body_sorted = sorted(body, key=lambda list: list[1])
+        z_nobg = median_filter(z_nobg, 3)
+        print(z_nobg.shape)
+        body = np.argwhere(z_nobg[:,:,0] > 100) #identifie points n'appartenant pas au bg, donc au corps du patient
 
+        top = body[0] #dessus de la tête = plus petite coordo en y (du coin supérieur gauche)
+        body_sorted = sorted(body, key=lambda list: list[1]) #tri selon x (coordos horizontalement)
         left = body_sorted[0]
         right = body_sorted[-1]
         print(top, left, right)
 
         if 'BG' in os.listdir(path_nobg)[0]:
-            w1 = left[1]-75
+            w1 = left[1]-100
+            w2 = w1+600
         elif 'BD' in os.listdir(path_nobg)[0]:
-            w1 = left[1]+25
+            w2 = right[1]+100
+            w1 = w2-600
         else:
-            w1 = left[1]-25
-        w2 = w1+500
-        h1 = top[0]+200
-        h2 = top[0]+800
+            w1 = left[1]-50
+            w2 = w1+600
+
+        h1 = 560
+        h2 = 1280
 
         global crop
         crop = (w1, w2, h1, h2)
@@ -143,10 +145,15 @@ class MyApp(Widget):
         self.ids.width.text = f'({w2-w1}, 0)'
         self.ids.height.text = f'(0, {h2-h1})'
 
+        timer_fin = time.process_time_ns()
+        print(timer_debut, timer_fin)
+        print(f'Temps automatic crop : {timer_fin - timer_debut} ns')
+
+    # Fonction pour définir le nombre de marqueurs utilisés
     def nb_marqueurs_input(self):
         global nb_marqueurs
         nb_marqueurs = int(self.ids.marq_nb_input.text)
-        self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs)
+        self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs) # taille du tableau variable selon le nombre de marqueurs
         self.ids.grid.rows = 1 + nb_marqueurs
         print(f'{nb_marqueurs} marqueurs utilisés')
 
@@ -176,30 +183,6 @@ class MyApp(Widget):
         self.ids.image_show.source = os.path.join(save_path_im, os.listdir(save_path_im)[image_nb-1])
         self.canvas.remove_group(u"circle") # efface les cercles verts des marqueurs
         self.ids.rep_continuity.text = ''
-        if not analyse_eff:
-            '''
-            # Affiche les coordonnées des marqueurs de l'image actuelle dans le tableau si détectés, sinon case vide
-            if dict_coordo_labels1[f'image{image_nb}']['C7'] != (np.nan, np.nan):
-                self.ids.coordo_1.text = f"({dict_coordo_labels1[f'image{image_nb}']['C7'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['C7'][1]:.0f})"
-            if dict_coordo_labels1[f'image{image_nb}']['C7'] == (np.nan, np.nan):
-                self.ids.coordo_1.text = ''
-            if dict_coordo_labels1[f'image{image_nb}']['G'] != (np.nan, np.nan):
-                self.ids.coordo_2.text = f"({dict_coordo_labels1[f'image{image_nb}']['G'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['G'][1]:.0f})"
-            if dict_coordo_labels1[f'image{image_nb}']['G'] == (np.nan, np.nan):
-                self.ids.coordo_2.text = ''
-            if dict_coordo_labels1[f'image{image_nb}']['D'] != (np.nan, np.nan):
-                self.ids.coordo_3.text = f"({dict_coordo_labels1[f'image{image_nb}']['D'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['D'][1]:.0f})"
-            if dict_coordo_labels1[f'image{image_nb}']['D'] == (np.nan, np.nan):
-                self.ids.coordo_3.text = ''
-            if dict_coordo_labels1[f'image{image_nb}']['T'] != (np.nan, np.nan):
-                self.ids.coordo_4.text = f"({dict_coordo_labels1[f'image{image_nb}']['T'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['T'][1]:.0f})"
-            if dict_coordo_labels1[f'image{image_nb}']['T'] == (np.nan, np.nan):
-                self.ids.coordo_4.text = ''
-            if dict_coordo_labels1[f'image{image_nb}']['L'] != (np.nan, np.nan):
-                self.ids.coordo_5.text = f"({dict_coordo_labels1[f'image{image_nb}']['L'][0]:.0f}, {dict_coordo_labels1[f'image{image_nb}']['L'][1]:.0f})"
-            if dict_coordo_labels1[f'image{image_nb}']['L'] == (np.nan, np.nan):
-                self.ids.coordo_5.text = ''
-            '''
         
         # Affiche les marqueurs si bouton activé
         if self.ids.button_showmarks.state == 'down':
@@ -218,7 +201,7 @@ class MyApp(Widget):
                     self.ids.rep_continuity.text = self.ids.rep_continuity.text[:-2]
 
         # Affiche positions dans le tableau après labellisation manuelle
-        if labelize_extent == True:
+        if labelize_extent and not analyse_eff:
             self.ids.grid.clear_widgets()
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
@@ -262,9 +245,8 @@ class MyApp(Widget):
         global detection_eff
         
         if len(path) > 1:
-            # Détection avec algo si mode Nouveau
-            if not 'annotated_frames' in os.listdir(path):
-                os.mkdir(path+'/annotated_frames/')
+            os.makedirs(path+'/annotated_frames/', exist_ok=True)
+            # Détecte les marqueurs, crée images annotées et fichiers txt avec positions
             if len(os.listdir(path+'/annotated_frames/')) == 0: #or self.ids.check_new.state == 'down':
                 marker_detection.annotate_frames(path, crop)
 
@@ -282,19 +264,6 @@ class MyApp(Widget):
                 dict_coordo[f'image{i+1}'] = coordinates
             
             detection_eff = True
-        
-        """ Détection avec algo si mode Nouveau
-            if self.ids.check_new.state == 'down':
-                for i in range(images_total):
-                    coordinates = []
-                    image = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[i]))
-                    keypoints = marker_detection.detect_markers(image)
-                    for n in range(len(keypoints)):
-                        coordo_xy = [keypoints[n].pt[0], keypoints[n].pt[1]]
-                        coordinates.append(coordo_xy)
-                    dict_coordo[f'image{i+1}'] = coordinates
-                self.labelize()
-                detection_eff = True """
 
         global im_dim
         im_dim = cv2.imread(os.path.join(save_path_im, os.listdir(save_path_im)[0])).shape
@@ -491,6 +460,7 @@ class MyApp(Widget):
         #self.labelize()
         self.show_image()
     
+    # Fonction pour détecter les discontinuités (changement important de pente) ...de moins en moins utile avec l'inteprolation
     def verif_continuity(self):
         im_prob_continuity = {}
         if detection_eff:
@@ -512,6 +482,7 @@ class MyApp(Widget):
 
         return im_prob_continuity
     
+    # Fonction pour définir une spline d'inteprolation pour chaque position x, y des marqueurs
     def interpolate_spline(self):
         x_axis = np.arange(images_total)
         x, y = {}, {}
@@ -534,7 +505,7 @@ class MyApp(Widget):
             #w = np.ones(m) #poids de 1 à tous les points
             if m > 7:
                 print(y[l][0], type(y[l][0][0]))
-                y[l][0] = gaussian_filter1d(y[l][0], 3)
+                y[l][0] = gaussian_filter1d(y[l][0], 3) #filtre les données avant interpolation
                 y[l][1] = gaussian_filter1d(y[l][1], 3)
 
                 spl[l][0] = splrep(x[l], y[l][0], k=3)
@@ -544,8 +515,8 @@ class MyApp(Widget):
 
         return splines_smooth
 
+    # Graphiques des positions des marqueurs selon l'image, avec splines d'interpolation
     def graph_continuity(self):
-        # Graphiques des positions des marqueurs selon l'image
         if detection_eff == True:
             xaxis = range(1, images_total+1)
             splines_smooth = self.interpolate_spline()
@@ -573,7 +544,7 @@ class MyApp(Widget):
         if self.ids.button_graph_continuity.state == 'normal':
             self.ids.graph.clear_widgets()
 
-    # Fonction de labelisation par régions, fonctionne peu importe le nombre de marqueurs
+    # Fonction de labelisation par régions, fonctionne peu importe le nombre de marqueurs (était utilisé pour le Participant 1 à l'hiver)
     """ def labelize(self):
         global dict_coordo_labels1
         dict_coordo_labels1 = {}
@@ -671,12 +642,10 @@ class MyApp(Widget):
 
                     for coordos in dict_coordo[im]:
                         if abs(coordos[0] - ref[0]) < 12 and abs(coordos[1] - ref[1]) < 10:
-                            print('position')
                             dict_coordo_labels_manual[im][label] = coordos                            
                             break
                         elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)+ref[1])) < 9:
                             dict_coordo_labels_manual[im][label] = coordos
-                            print('derivée')
                             break
                         else:
                             dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
@@ -745,7 +714,7 @@ class MyApp(Widget):
             coordos_sorted_x = sorted(coordos_sorted_y, key=lambda tup: tup[0])
             dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
             dict_coordo_xyz_labels[im].update({'G': coordos_sorted_x[0]})
-            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_x[1]})
+            dict_coordo_xyz_labels[im].update({'T2': coordos_sorted_x[1]})
 
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
@@ -761,19 +730,13 @@ class MyApp(Widget):
                     self.labelize_8()
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
-                dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': [], 'angle_rachis': [], 'var_rachis': []}
-                # Calcul des métriques d'analyse et ajout au dictionnaire de métriques
+                dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
+
                 for im, coordo in dict_coordo_xyz_labels.items():
                     scap_y = np.degrees(np.arctan((coordo['D'][1] - coordo['G'][1])/(coordo['D'][0] - coordo['G'][0])))
                     dict_metriques['angle_scap_vert'].append(scap_y)
                     scap_z = np.degrees(np.arctan((coordo['G'][2] - coordo['D'][2])/(coordo['D'][0] - coordo['G'][0]))) #ajouter avec z
                     dict_metriques['angle_scap_prof'].append(scap_z)
-
-                    rachis_x = np.degrees(np.arctan((coordo['L'][0] - coordo['C7'][0])/(coordo['L'][1] - coordo['C7'][1])))
-                    dict_metriques['angle_rachis'].append(rachis_x)
-                    rachis_h = [coordo['L'][0], coordo['T'][0], coordo['C7'][0]] #positions horizontales
-                    var_rachis = np.std(rachis_h)/abs(np.mean(rachis_h)) #devrait être nulle pour un alignement parfait
-                    dict_metriques['var_rachis'].append(var_rachis)
 
                     # calcul distance horizontale entre marqueurs D/G et l'axe du rachis (x=ay+b)
                     a = (coordo['L'][0]-coordo['C7'][0])/(coordo['L'][1]-coordo['C7'][1])
@@ -786,6 +749,11 @@ class MyApp(Widget):
                     d2 = abs(x3 - x4) #distance entre D et l'axe de la colonne
                     diff_d1d2 = abs(d1 - d2)
                     dict_metriques['diff_dg'].append(diff_d1d2)
+
+                if nb_marqueurs in [5,6]:
+                    dict_metriques.update(self.analyse_5())
+                if nb_marqueurs in [8,9]:
+                    dict_metriques.update(self.analyse_8())
 
                 # Recherche des metriques optimales (et images associées)
                 global min_metriques
@@ -811,7 +779,37 @@ class MyApp(Widget):
         timer_fin_analyse = time.process_time_ns()
         print(timer_debut_analyse, timer_fin_analyse)
         print(f'Temps calcul des métriques + graphiques :{timer_fin_analyse - timer_debut_analyse} ns')
-              
+
+
+    # Calcule des métriques pour 5 marqueurs
+    def analyse_5(self):
+        dict_metriques = {'angle_rachis': [], 'var_rachis': []}
+        # Calcul des métriques d'analyse et ajout au dictionnaire de métriques
+        for im, coordo in dict_coordo_xyz_labels.items():
+
+            rachis_x = np.degrees(np.arctan((coordo['L'][0] - coordo['C7'][0])/(coordo['L'][1] - coordo['C7'][1])))
+            dict_metriques['angle_rachis'].append(rachis_x)
+            rachis_h = [coordo['L'][0], coordo['T'][0], coordo['C7'][0]] #positions horizontales
+            var_rachis = np.std(rachis_h)/abs(np.mean(rachis_h)) #devrait être nulle pour un alignement parfait
+            dict_metriques['var_rachis'].append(var_rachis)
+
+        return dict_metriques
+
+    # Calcule des métriques pour 8 marqueurs
+    def analyse_8(self):
+        dict_metriques = {'angle_psis': [], 'scoliosis': []}
+        for im, coordo in dict_coordo_xyz_labels.items():
+            psis_y = np.degrees(np.arctan((coordo['ID'][1] - coordo['IG'][1])/(coordo['ID'][0] - coordo['IG'][0])))
+            dict_metriques['angle_psis'].append(psis_y)
+            
+            a = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
+            b = np.sqrt((coordo['T2'][0]-coordo['L'][0])**2+(coordo['T2'][1]-coordo['L'][1])**2)
+            c = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
+            scoliosis_angle = np.degrees(np.arccos((c**2+b**2-a**2)/(2*a*b)))
+            dict_metriques['scoliosis'].append(scoliosis_angle)
+        
+        return dict_metriques
+
     # Calcule le score d'une métrique pour une image selon toutes les métriques de cette catégorie
     def map_metriques(self, m, metriques):
         pond = 20*(1 - abs(m)/np.max(np.absolute(metriques)))
@@ -846,22 +844,34 @@ class MyApp(Widget):
         ax1.set_title("Angles entre les scapulas", fontsize=9)
         ax1.set_ylabel('Angle (degrés)', fontsize=9)
 
-        ax2.plot(xaxis, dict_metriques['angle_rachis'])
-        ax2.scatter(min_metriques['angle_rachis'][0], min_metriques['angle_rachis'][1], marker='*', c='r')
-        ax2.set_title("Angle entre l'axe du rachis et la verticale", fontsize=9)
-        ax2.set_ylabel('Angle (degrés)', fontsize=9)
+        ax2.plot(xaxis, dict_metriques['diff_dg'])
+        ax2.scatter(min_metriques['diff_dg'][0], min_metriques['diff_dg'][1], marker='*', c='r')
+        ax2.set_title("|Distance rachis-G - Distance rachis-D|", fontsize=9)
+        ax2.set_ylabel('Distance (mm)', fontsize=9)
 
-        ax3.plot(xaxis, dict_metriques['diff_dg'])
-        ax3.scatter(min_metriques['diff_dg'][0], min_metriques['diff_dg'][1], marker='*', c='r')
-        ax3.set_title("|Distance rachis-G - Distance rachis-D|", fontsize=9)
+        if nb_marqueurs in [5,6]:
+            metrique_3 = 'angle_rachis'
+            metrique_4 = 'var_rachis'
+            ax3.set_title("Angle entre l'axe du rachis et la verticale", fontsize=9)
+            ax3.set_ylabel('Angle (degrés)', fontsize=9)
+            ax4.set_title('Écart-type (C7, T, L) / Moyenne en x', fontsize=9)
+            ax4.set_ylabel('Variabilité', fontsize=9)
+        
+        elif nb_marqueurs in[8,9]:
+            metrique_3 = 'angle_psis'
+            metrique_4 = 'scoliosis'
+            ax3.set_title("Angle vertical entre les PSIS", fontsize=9)
+            ax3.set_ylabel('Angle (degrés)', fontsize=9)
+            ax4.set_title('Angle de scoliose', fontsize=9)
+            ax4.set_ylabel('180 - Angle (degrés)', fontsize=9)
+
+        ax3.plot(xaxis, dict_metriques[metrique_3])
+        ax3.scatter(min_metriques[metrique_3][0], min_metriques[metrique_3][1], marker='*', c='r')
         ax3.set_xlabel("Numéro de l'image", fontsize=9)
-        ax3.set_ylabel('Distance (mm)', fontsize=9)
-
-        ax4.plot(xaxis, dict_metriques['var_rachis'])
-        ax4.scatter(min_metriques['var_rachis'][0], min_metriques['var_rachis'][1], marker='*', c='r')
-        ax4.set_title('Écart-type (C7, T, L) / Moyenne en x', fontsize=9)
+        
+        ax4.plot(xaxis, dict_metriques[metrique_4])
+        ax4.scatter(min_metriques[metrique_4][0], min_metriques[metrique_4][1], marker='*', c='r')
         ax4.set_xlabel("Numéro de l'image", fontsize=9)
-        ax4.set_ylabel('Variabilité', fontsize=9)
         
         plt.tight_layout()
     
@@ -920,9 +930,10 @@ class MyApp(Widget):
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerow(['image no'] + list(dict_metriques.keys()))
             for i in range(images_total):
-                writer.writerow([i+1, dict_metriques['angle_scap_vert'][i], dict_metriques['angle_scap_prof'][i],
-                                 dict_metriques['diff_dg'][i],dict_metriques['angle_rachis'][i],
-                                 dict_metriques['var_rachis'][i], dict_metriques['scores'][i]])
+                row = [i+1]
+                for metrique in dict_metriques.values():
+                    row.append(metrique[i])
+                writer.writerow(row)
                 i += 1
     
     # Enregistre le graphique des métriques sous format png
