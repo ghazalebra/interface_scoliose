@@ -51,7 +51,7 @@ def read_single_xyz_raw_file(file_path):
         zz = z[np.where(z>0)]
         body_z = np.median(zz)
         z_nobg = z
-        z_nobg[np.where(z > body_z + 600)] = 0
+        z_nobg[np.where(z > body_z + 400)] = 0
         z_nobg = median_filter(z_nobg, 5) #correction pour trous dans l'image
     # reversing the image vertically
     # data_array = data_array[0:1:1, :]
