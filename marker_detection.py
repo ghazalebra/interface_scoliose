@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import sys
+import tqdm
 import matplotlib.pyplot as plt
 
 # input is an image (one frame of movement sequence)
