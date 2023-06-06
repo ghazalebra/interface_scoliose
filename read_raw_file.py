@@ -51,8 +51,8 @@ def read_single_xyz_raw_file(file_path):
         zz = z[np.where(z>0)]
         body_z = np.median(zz)
         z_nobg = z
-        z_nobg[np.where(z > body_z + 400)] = 0
-        z_nobg = median_filter(z_nobg, 5) #correction pour trous dans l'image
+        z_nobg[np.where(z > body_z + 300)] = 0
+        #z_nobg = median_filter(z_nobg, 5) #correction pour trous dans l'image
     # reversing the image vertically
     # data_array = data_array[0:1:1, :]
     # normalizing the values to be in the range (0, 255)
@@ -83,13 +83,13 @@ def copy_xyz_frames(src_path, des_path):
             # print(file_path, save_file_path)
             shutil.copy(file_path, save_file_path)
 
-def write_xyz_coordinates(folder_path, dict_coordo, crop):
+def write_xyz_coordinates(folder_path, dict_coordo, w1, w2, h1, h2):
     xyz_path = folder_path + '/xyz/'
     for filename in os.listdir(xyz_path):
         i = filename.index('XYZ')+4
         marqueurs = dict_coordo[f'image{int(filename[i:-4])+1}']
         # trouve les coordonnées associées aux marqueurs détectés
-        coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs, crop)
+        coordos = find_xyz_coordinates(os.path.join(xyz_path, filename), marqueurs, w1, w2, h1, h2)
         # removes the '.raw' extension from the end of the filename and replaces it with '.png'
         csv_filename = folder_path + '/XYZ_converted/' + filename[:-4] + '.csv'
         with open(csv_filename, 'w', newline='') as csvfile:
@@ -97,7 +97,7 @@ def write_xyz_coordinates(folder_path, dict_coordo, crop):
             for c in coordos:
                 writer.writerow(c)
 
-def find_xyz_coordinates(file_path, marqueurs, crop):
+def find_xyz_coordinates(file_path, marqueurs, w1, w2, h1, h2):
     # the image dimensions
     w = 1936
     h = 1176
@@ -106,7 +106,6 @@ def find_xyz_coordinates(file_path, marqueurs, crop):
         f.seek(header_size)
         data_array = np.fromfile(f, np.float32).reshape((h,w,3))
     #retrieve the depth as an image (and flip upside down)
-    (w1, w2, h1, h2) = crop
     x_array = data_array[:, :,0].T
     x_array = x_array[-1:0:-1, :][h1:h2, w1:w2]
     y_array = data_array[:, :,1].T
