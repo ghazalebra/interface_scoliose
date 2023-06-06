@@ -75,9 +75,9 @@ class MyApp(Widget):
 
             # crée les images Preprocessed pour consultation
             if len(os.listdir(save_path_im)) == 0:
-                for name in os.listdir(save_path):
-                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, name)), crop)
-                    cv2.imwrite(os.path.join(save_path_im, name), preprocessed_frame)
+                for filename_i, filename_xyz in zip(os.listdir(save_path), os.listdir(path+'/xyz_nobg/')):
+                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, filename_i)), cv2.imread(os.path.join(path+'/xyz_nobg/', filename_xyz)), w1, w2, h1, h2)
+                    cv2.imwrite(os.path.join(save_path_im, filename_i), preprocessed_frame)
 
             if len(os.listdir(save_path_xyz)) == 0:
                 RRF.copy_xyz_frames(path, save_path_xyz)
@@ -118,29 +118,31 @@ class MyApp(Widget):
         z_nobg = cv2.imread(os.path.join(path_nobg, os.listdir(path_nobg)[0]))
         z_nobg = median_filter(z_nobg, 3)
         print(z_nobg.shape)
-        body = np.argwhere(z_nobg[:,:,0] > 100) #identifie points n'appartenant pas au bg, donc au corps du patient
+        body = np.argwhere(z_nobg[1000,:,0] > 100) #identifie points n'appartenant pas au bg, donc au corps du patient
 
-        top = body[0] #dessus de la tête = plus petite coordo en y (du coin supérieur gauche)
-        body_sorted = sorted(body, key=lambda list: list[1]) #tri selon x (coordos horizontalement)
-        left = body_sorted[0]
-        right = body_sorted[-1]
-        print(top, left, right)
+        #body_sorted = sorted(body, key=lambda list: list[1]) #tri selon x (coordos horizontalement)
+        left = int(body[0])
+        right = int(body[-1])
+
+        global w1
+        global w2
+        global h1
+        global h2
 
         if 'BG' in os.listdir(path_nobg)[0]:
-            w1 = left[1]-100
+            w1 = left-100
             w2 = w1+600
         elif 'BD' in os.listdir(path_nobg)[0]:
-            w2 = right[1]+100
+            w2 = right+100
             w1 = w2-600
         else:
-            w1 = left[1]-50
+            w1 = left-50
             w2 = w1+600
 
         h1 = 560
         h2 = 1280
 
-        global crop
-        crop = (w1, w2, h1, h2)
+        print(w1, w2, h1, h2)
 
         self.ids.width.text = f'({w2-w1}, 0)'
         self.ids.height.text = f'(0, {h2-h1})'
@@ -226,7 +228,10 @@ class MyApp(Widget):
             d_im = dict_coordo_xyz_labels[f'image{image_nb}']
             for key, l in zip(d_im.keys(), labels):
                 self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
-                p = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                if l in dict_coordo_labels_manual[f'image{image_nb}']:
+                    p = dict_coordo_labels_manual[f'image{image_nb}'][l]
+                else:
+                    p = [np.nan, np.nan]
                 self.ids.grid.add_widget(Label(text=f'({p[0]:.0f}, {p[1]:.0f})', color=(0,0,0,1)))
                 self.ids.grid.add_widget(Label(text=f'{key}', color=(0,0,0,1)))
                 c = d_im[key]
@@ -248,10 +253,10 @@ class MyApp(Widget):
             os.makedirs(path+'/annotated_frames/', exist_ok=True)
             # Détecte les marqueurs, crée images annotées et fichiers txt avec positions
             if len(os.listdir(path+'/annotated_frames/')) == 0: #or self.ids.check_new.state == 'down':
-                marker_detection.annotate_frames(path, crop)
+                marker_detection.annotate_frames(path, w1, w2, h1, h2)
 
             # Recrée le dictionnaire de coordonnées à partir des fichiers de landmarks
-            for filename in os.listdir(path+'/landmarks/') :
+            for filename in os.listdir(path+'/landmarks/'):
                 coordinates = []
                 keypoints = []
                 with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
@@ -260,7 +265,7 @@ class MyApp(Widget):
                 for n in range(len(keypoints)):
                     coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
                     coordinates.append(coordo_xy)
-                i = int(filename[5:-14])
+                i = int(filename[10:-4])
                 dict_coordo[f'image{i+1}'] = coordinates
             
             detection_eff = True
@@ -270,8 +275,8 @@ class MyApp(Widget):
 
         # Va chercher les positions corrigées enregistrées si mode Ouvrir
         if self.ids.check_open.state == 'down':
-            global analyse_eff
-            analyse_eff = 'Metriques' in os.listdir(path+'') #Analyse effectuée (et utilisable) si métriques enregistrées
+            #global analyse_eff
+            #analyse_eff = 'Metriques' in os.listdir(path+'') #Analyse effectuée (et utilisable) si métriques enregistrées
             
             if 'Positions' in os.listdir(path):
                 # Recrée dictionnaire de positions avec labels
@@ -442,21 +447,12 @@ class MyApp(Widget):
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
                     # Modification des marqueurs loin de leur courbe d'inteprolation
-                    if abs(c[0] - c_interpolate[0]) > 5 or abs(c[1] - c_interpolate[1]) > 5:
+                    if (abs(c[0] - c_interpolate[0]) > 5 or abs(c[1] - c_interpolate[1]) > 5) and c in dict_coordo[f'image{im}']:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
                         print('modif interpolation')
-        '''
-        # ajout par position moyenne sur les images précédente et suivante
-        for im, nb in im_prob_nb:
-            if im-1 not in im_prob and im+1 not in im_prob and nb == 4:
-                index_nan = list(dict_coordo_labels1[f'image{im}'].values()).index((np.nan, np.nan))
-                m_manquant = list(dict_coordo_labels1[f'image{im}'].keys())[index_nan]
-                x = (dict_coordo_labels1[f'image{im+1}'][m_manquant][0] + dict_coordo_labels1[f'image{im-1}'][m_manquant][0])/2
-                y = (dict_coordo_labels1[f'image{im+1}'][m_manquant][1] + dict_coordo_labels1[f'image{im-1}'][m_manquant][1])/2
-                dict_coordo[f'image{im}'].append([x,y]) #ajout marqueur par interpolation linéaire avec images précédente et suivante
-        '''
+
         #self.labelize()
         self.show_image()
     
@@ -564,17 +560,20 @@ class MyApp(Widget):
                 elif 200 < x < 320 and 350 < y < 480:
                     dict_coordo_labels1[im]['L'] = (x,y) """
 
-    # Fonction pour labellisation manuelle sur une image, puis étendue sur les autres par proximité
+    # Groupes de fonctions pour labellisation manuelle sur une image, puis étendue sur les autres par proximité
+    # Détecte clic et associe marqueur à labelliser
     def labelize_manual(self, touch_pos):
         if self.ids.labelize_manual.state == 'down':
             m_pos = [0,0]
             # im_dim = (600, 500, 3) = (height, width, channels)
+            # détecte si le clic est dans le cadre de l'image
             if 0.03*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.03*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
                 m_pos[0] = (touch_pos[0]/self.width - 0.03)/(self.ids.image_show.width/self.width)*im_dim[1]
                 m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
             # Trouve le marqueur le plus près pour lui associer le label
                 for c in dict_coordo[f'image{image_nb}']:
                     if abs(m_pos[0]-c[0]) < 20 and abs(m_pos[1]-c[1]) < 20:
+                        # ajout d'un cercle bleu pa^le pour montrer qu'un marqueur est sélectionné
                         with self.canvas:
                             Color(171/255.0, 222/255.0, 231/255.0, .8)
                             d = 7
@@ -584,7 +583,8 @@ class MyApp(Widget):
                         break   
         else:
             pass
-
+    
+    # Entre le label du marqueur sélectionne dans le tableau et dans le dictionnaire, extend labelisation si tous les marqueurs labellisés
     def label_in(self):
         label = self.ids.label_input.text
         #self.ids.label_input.text = ''
@@ -612,6 +612,7 @@ class MyApp(Widget):
             
             self.extend_labelisation()
     
+    # Étend la labellisation de la 1re image aux suivantes (réexécutée en cours de correction)
     def extend_labelisation(self):
         global labelize_extent
         labelize_extent = True
@@ -619,6 +620,7 @@ class MyApp(Widget):
             num = int(im[5:])
             if im not in dict_coordo_labels_manual:
                 dict_coordo_labels_manual.update({im:{}})
+            # définit les références à partir des positions correspondantes sur les images précédentes
             for label in dict_coordo_labels_manual['image1'].keys():
                 ref_prec = [0,0]
                 if label in dict_coordo_labels_manual[im] and dict_coordo_labels_manual[im][label] != [np.nan, np.nan]:
@@ -639,19 +641,19 @@ class MyApp(Widget):
                             break
                         else:
                             i += 1
-
+                    # cherche dans les marqueurs du dictionnaire de l'image actuelle s'il y en a un qui peut être labellisé (proche de ref ou ref_prec)
                     for coordos in dict_coordo[im]:
-                        if abs(coordos[0] - ref[0]) < 12 and abs(coordos[1] - ref[1]) < 10:
-                            dict_coordo_labels_manual[im][label] = coordos                            
-                            break
-                        elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)+ref[1])) < 9:
-                            dict_coordo_labels_manual[im][label] = coordos
-                            break
+                        if coordos not in dict_coordo_labels_manual[im].values():
+                            if (abs(coordos[0] - ref[0]) < 12 and abs(coordos[1] - ref[1]) < 10) or (abs(coordos[0] - ref_prec[0]) < 12 and abs(coordos[1] - ref_prec[1]) < 10):
+                                dict_coordo_labels_manual[im][label] = coordos                            
+                                break
+                            elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)+ref[1])) < 9:
+                                dict_coordo_labels_manual[im][label] = coordos
+                                break
                         else:
                             dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
                         
-                
-
+                        
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
         global dict_coordo_xyz
@@ -665,7 +667,7 @@ class MyApp(Widget):
         for key in dict_coordo_labels_manual.keys():
             dict_coordo[key] = list(dict_coordo_labels_manual[key].values())
 
-        RRF.write_xyz_coordinates(path, dict_coordo, crop)
+        RRF.write_xyz_coordinates(path, dict_coordo, w1, w2, h1, h2)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
         for filename in os.listdir(save_xyz):
             index_XYZ = filename.find('_XYZ') + 5
@@ -676,10 +678,6 @@ class MyApp(Widget):
                 for row in reader:
                     row = [float(i) for i in row]
                     dict_coordo_xyz[key].append([row[1], row[0], row[2]])
-
-        #print(dict_coordo)
-        #print(dict_coordo_labels_manual)
-        #print(dict_coordo_xyz)
     
     # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
