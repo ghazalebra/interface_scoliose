@@ -87,7 +87,7 @@ def preprocess(image, z_nobg, w1, w2, h1, h2):
     image[np.where(z_nobg < 50)] = 0
 
     # cropping the image
-    image = image[h1:h2, w1:w2, :]
+    image = image[w1:w2, h1:h2, :]
 
     # The initial processing of the image
     # image = cv2.medianBlur(image, 3)
