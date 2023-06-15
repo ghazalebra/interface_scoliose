@@ -42,14 +42,14 @@
         Label:
             text: 'Nombre de marqueurs :'
             font_size: 15
-            size_hint: (.12, .05)
+            size_hint: (.1, .05)
             pos_hint:{'x':.38, 'top':.95}
         TextInput:
             id: marq_nb_input
             text: ''
             font_size: 15
             size_hint: (.02, .045)
-            pos_hint:{'x':.51, 'top':.95}
+            pos_hint:{'x':.48, 'top':.95}
             multiline: False
             on_text_validate: root.nb_marqueurs_input()
         Label:
@@ -99,7 +99,7 @@
         BoxLayout:
             orientation:"vertical"
             spacing:5
-            pos_hint:{'x':.38, 'top':.87}
+            pos_hint:{'x':.38, 'top':.89}
             size_hint:{.14, .58}
             ToggleButton:
                 id: button_showmarks
@@ -145,6 +145,18 @@
                 text: "Confirmer et\nlancer l'analyse"
                 on_press: root.press_color()
                 on_press: root.analyse()
+            ToggleButton:
+                id: button_distances
+                text: "Afficher les distances\nentre marqueurs"
+                on_press: root.press_color()
+                on_press: root.show_distances()
+        Image: #système d'axes
+            id: xyz_axis
+            size_hint: (0, 0)
+            background_color:(0,0,0,0)
+            pos_hint: {'x':.03, 'top':.85}
+            allow_stretch: False
+            keep_ratio: True
         Label:
             text: 'Label :'
             font_size: 15
