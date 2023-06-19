@@ -133,7 +133,7 @@ class MyApp(Widget):
             w1 = left-50
             w2 = w1+600
         elif 'BD' in os.listdir(path_nobg)[0]:
-            w2 = right+50
+            w2 = right+75
             w1 = w2-600
         else:
             w1 = left-50
@@ -190,10 +190,10 @@ class MyApp(Widget):
         if self.ids.button_showmarks.state == 'down':
             self.show_marqueurs()
         if self.ids.button_distances.state == 'down':
-            self.show_marqueurs_gold()
             self.remove_widget(self.Distances)
             self.show_distances()
-
+            self.show_marqueurs_gold()
+            
         # Affiche les numéros d'images n'ayant pas le bon nb de marqueurs si bouton activé
         if self.ids.button_verif_nb.state == 'down':
             self.verif_nb()
@@ -269,19 +269,6 @@ class MyApp(Widget):
             #marker_array[0][i] = [[point.pt[0], point.pt[1]] for point in points]
             dict_coordo.update({f'image{i}' : [[float(point.pt[0]), float(point.pt[1])] for point in points]})
             i += 1
-
-        """ # Recrée le dictionnaire de coordonnées à partir des fichiers de landmarks
-        for filename in os.listdir(path+'/landmarks/'):
-            coordinates = []
-            keypoints = []
-            with open(os.path.join(path+'/landmarks/', filename), 'r') as f:
-                for line in f.readlines():
-                    keypoints.append(line.split(' '))
-            for n in range(len(keypoints)):
-                coordo_xy = [float(keypoints[n][0]), float(keypoints[n][1])]
-                coordinates.append(coordo_xy)
-            i = int(filename[10:-4])
-            dict_coordo[f'image{i+1}'] = coordinates """
             
         detection_eff = True
 
@@ -312,6 +299,8 @@ class MyApp(Widget):
                 self.ids.grid.rows = 1 + nb_marqueurs
 
                 detection_eff = True
+                global labelize_extent
+                labelize_extent = True
 
                 if 'coordonnees_xyz.csv' in os.listdir(path+'/Positions/'):
                 # Recrée le dictionnaire de coordonnées x,y,z
@@ -732,7 +721,7 @@ class MyApp(Widget):
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
         im_prob_nb = self.verif_nb()
-        if len(im_prob_nb) == 0 and self.ids.button_analyze.state == 'down':
+        if len(im_prob_nb) == 0:
             global analyse_eff
             analyse_eff = True
             if self.ids.check_new.state == 'down' or 'coordonnees_xyz.csv' not in os.listdir(path+'/Positions/'):
@@ -782,7 +771,10 @@ class MyApp(Widget):
                 self.graph_analyze()
                 self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
                 plt.close()
-                print(self.max_symmetry())
+                
+                global max_sym_im
+                max_sym_im, max_sym = self.max_symmetry()
+                print(max_sym_im, max_sym)
 
         if self.ids.button_analyze.state == 'normal':
             self.ids.graph.clear_widgets()
@@ -817,8 +809,8 @@ class MyApp(Widget):
             
             a = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
             b = np.sqrt((coordo['T2'][0]-coordo['L'][0])**2+(coordo['T2'][1]-coordo['L'][1])**2)
-            c = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
-            scoliosis_angle = np.degrees(np.arccos((c**2+b**2-a**2)/(2*a*b)))
+            c = np.sqrt((coordo['T1'][0]-coordo['L'][0])**2+(coordo['T1'][1]-coordo['L'][1])**2)
+            scoliosis_angle = 180 - np.degrees(np.arccos((a**2+b**2-c**2)/(2*a*b)))
             dict_metriques['scoliosis'].append(scoliosis_angle)
         
         return dict_metriques
@@ -891,7 +883,8 @@ class MyApp(Widget):
     # Calculer les distances des marqueurs de chaque frame au gold frame
     def distance_to_gold(self):
         global gold_nb
-        gold_nb = self.max_symmetry()[0]
+        global max_sym_im
+        gold_nb = max_sym_im
 
         marker_array = np.zeros((len(os.listdir(path+'/Preprocessed/')), 8, 3))
     
@@ -941,7 +934,7 @@ class MyApp(Widget):
             coordinates = dict_coordo_labels_manual[f'image{image_nb}'][l]
             x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
             y = 0.85 - (coordinates[1]/im_dim[0])*0.78
-            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][1]:.1f}\nY : {dist_act[l][0]:.1f}\nZ : {dist_act[l][2]:.1f}',
+            self.dist_txt = Label(text=f'{l}\nX : {-dist_act[l][0]:.0f}\nY : {-dist_act[l][1]:.0f}\nZ : {-dist_act[l][2]:.0f}',
                                 fontsize='10sp', color=(1,1,1,1), size_hint=(.2, .2), pos=(self.width*x, self.height*y))
             self.Distances.add_widget(self.dist_txt)
 
