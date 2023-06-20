@@ -323,7 +323,6 @@ class MyApp(Widget):
                                     dict_coordo_xyz_labels[key].update({l : [row[i], row[i+1], row[i+2]]})
                                     i += 3
                             j += 1
-                        print(dict_coordo_xyz_labels)
                 else:
                     self.coordo_xyz_marqueurs()
 
@@ -455,7 +454,6 @@ class MyApp(Widget):
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
-                        print('modif interpolation')
 
         #self.labelize()
         self.show_image()
@@ -504,7 +502,6 @@ class MyApp(Widget):
             sm = m-math.sqrt(2*m)
             #w = np.ones(m) #poids de 1 à tous les points
             if m > 7:
-                print(y[l][0], type(y[l][0][0]))
                 y[l][0] = gaussian_filter1d(y[l][0], 3) #filtre les données avant interpolation
                 y[l][1] = gaussian_filter1d(y[l][1], 3)
 
@@ -607,8 +604,6 @@ class MyApp(Widget):
             self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
         if labelize_extent:
             self.show_image()
-            
-        print(dict_coordo_labels_manual[f'image{image_nb}'])
         
         if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
             global labels
