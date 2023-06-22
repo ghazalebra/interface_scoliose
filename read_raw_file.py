@@ -114,7 +114,7 @@ def find_xyz_coordinates(file_path, marqueurs, w1, w2, h1, h2):
     z_array = z_array[-1:0:-1, :][h1:h2, w1:w2]
 
     coordos = []
-    for el in marqueurs:
+    for l, el in marqueurs.items():
         x = (x_array[round(el[1]),round(el[0])])
         y = (y_array[round(el[1]),round(el[0])])
         z = (z_array[round(el[1]),round(el[0])])
@@ -130,6 +130,6 @@ def find_xyz_coordinates(file_path, marqueurs, w1, w2, h1, h2):
             print(z)
             i += 1
 
-        coordos.append([x, y, z]) #liste de 5 listes contenant les coordos (x,y,z) pour chaque marqueur
+        coordos.append([l, x, y, z]) #liste de 5 listes contenant les coordos (x,y,z) pour chaque marqueur
 
     return coordos

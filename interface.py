@@ -94,6 +94,9 @@ class MyApp(Widget):
             dict_coordo = {}
             global dict_coordo_labels_manual
             dict_coordo_labels_manual = {}
+
+            global nb_marqueurs
+            nb_marqueurs = np.nan
             
             # Lance la détection des marqueurs et affiche la 1re image
             self.detect_marqueurs()
@@ -158,6 +161,7 @@ class MyApp(Widget):
         self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs) # taille du tableau variable selon le nombre de marqueurs
         self.ids.grid.rows = 1 + nb_marqueurs
         print(f'{nb_marqueurs} marqueurs utilisés')
+        self.ids.nb_marqueurs.color = (1,1,1,1)
 
     # Fonction pour sélectionner le numéro de l'image à afficher, actualise la position du curseur
     def image_nb_input(self):
@@ -192,7 +196,7 @@ class MyApp(Widget):
         if self.ids.button_distances.state == 'down':
             self.remove_widget(self.Distances)
             self.show_distances()
-            self.show_marqueurs_gold()
+            #self.show_marqueurs_gold()
             
         # Affiche les numéros d'images n'ayant pas le bon nb de marqueurs si bouton activé
         if self.ids.button_verif_nb.state == 'down':
@@ -299,6 +303,10 @@ class MyApp(Widget):
                 self.ids.grid.rows = 1 + nb_marqueurs
 
                 detection_eff = True
+
+                self.ids.button_showmarks.state = 'down'
+                self.ids.button_verif_nb.state = 'down'
+
                 global labelize_extent
                 labelize_extent = True
 
@@ -567,6 +575,9 @@ class MyApp(Widget):
     # Groupes de fonctions pour labellisation manuelle sur une image, puis étendue sur les autres par proximité
     # Détecte clic et associe marqueur à labelliser
     def labelize_manual(self, touch_pos):
+        global m_to_label
+        m_to_label = [np.nan, np.nan]
+
         if self.ids.labelize_manual.state == 'down':
             m_pos = [0,0]
             # im_dim = (600, 500, 3) = (height, width, channels)
@@ -582,7 +593,7 @@ class MyApp(Widget):
                             Color(171/255.0, 222/255.0, 231/255.0, .8)
                             d = 7
                             Ellipse(pos=(touch_pos[0] - d/2, touch_pos[1] - d/2), size=(d, d), group=u"label")
-                        global m_to_label
+                        
                         m_to_label = c
                         break   
         else:
@@ -593,28 +604,35 @@ class MyApp(Widget):
         label = self.ids.label_input.text
         #self.ids.label_input.text = ''
         self.canvas.remove_group(u"label")
-        global dict_coordo_labels_manual
-        if f'image{image_nb}' in dict_coordo_labels_manual.keys():
-            if label not in dict_coordo_labels_manual[f'image{image_nb}'] and m_to_label not in dict_coordo_labels_manual[f'image{image_nb}'].values():
-                dict_coordo_labels_manual[f'image{image_nb}'].update({label : m_to_label})
-            else:
-                dict_coordo_labels_manual[f'image{image_nb}'][label] = m_to_label
-        else:
-            dict_coordo_labels_manual.update({f'image{image_nb}': {label : m_to_label}})
 
-        if not labelize_extent:
-            self.ids.grid.add_widget(Label(text=f'{label}', color=(0,0,0,1)))
-            self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
-        if labelize_extent:
-            self.show_image()
+        if m_to_label != [np.nan, np.nan]:
+            global dict_coordo_labels_manual
+            if f'image{image_nb}' in dict_coordo_labels_manual.keys():
+                if label not in dict_coordo_labels_manual[f'image{image_nb}'] and m_to_label not in dict_coordo_labels_manual[f'image{image_nb}'].values():
+                    dict_coordo_labels_manual[f'image{image_nb}'].update({label : m_to_label})
+                else:
+                    dict_coordo_labels_manual[f'image{image_nb}'][label] = m_to_label
+            else:
+                dict_coordo_labels_manual.update({f'image{image_nb}': {label : m_to_label}})
+
+            if not labelize_extent:
+                self.ids.grid.add_widget(Label(text=f'{label}', color=(0,0,0,1)))
+                self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
+            if labelize_extent:
+                self.show_image()
+                
+            print(dict_coordo_labels_manual[f'image{image_nb}'])
             
-        print(dict_coordo_labels_manual[f'image{image_nb}'])
-        
-        if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
-            global labels
-            labels = list(dict_coordo_labels_manual[f'image{image_nb}'].keys())
-            
-            self.extend_labelisation()
+            if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
+                global labels
+                labels = list(dict_coordo_labels_manual[f'image{image_nb}'].keys())
+                
+                self.extend_labelisation()
+
+        print(nb_marqueurs)    
+        if np.isnan(nb_marqueurs):
+            print('color')
+            self.ids.nb_marqueurs.color = (1,0,0,1)
     
     # Étend la labellisation de la 1re image aux suivantes (réexécutée en cours de correction)
     def extend_labelisation(self):
@@ -660,8 +678,8 @@ class MyApp(Widget):
                         
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
-        global dict_coordo_xyz
-        dict_coordo_xyz = {}
+        global dict_coordo_xyz_labels
+        dict_coordo_xyz_labels = {}
         global save_xyz
         save_xyz = path+'/XYZ_converted/'
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
@@ -671,19 +689,20 @@ class MyApp(Widget):
         for key in dict_coordo_labels_manual.keys():
             dict_coordo[key] = list(dict_coordo_labels_manual[key].values())
 
-        RRF.write_xyz_coordinates(path, dict_coordo, w1, w2, h1, h2)
+        RRF.write_xyz_coordinates(path, dict_coordo_labels_manual, w1, w2, h1, h2)
         # Récupère les données des fichiers csv des coordonnées x,y,z des marqueurs
         for filename in os.listdir(save_xyz):
             index_XYZ = filename.find('_XYZ') + 5
             key = f'image{int(filename[index_XYZ:-4])+1}'
             with open(os.path.join(save_xyz, filename), newline='') as csvfile:
                 reader = csv.reader(csvfile, delimiter=';')
-                dict_coordo_xyz.update({key : []})
+                dict_coordo_xyz_labels.update({key : {}})
                 for row in reader:
-                    row = [float(i) for i in row]
-                    dict_coordo_xyz[key].append([row[1], row[0], row[2]])
+                    l = row[0]
+                    row = [float(i) for i in row[1:]]
+                    dict_coordo_xyz_labels[key].update({l:[row[1], row[0], row[2]]})
     
-    # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
+    """ # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
     def labelize_5(self):
         global dict_coordo_xyz_labels
@@ -716,7 +735,7 @@ class MyApp(Widget):
             coordos_sorted_x = sorted(coordos_sorted_y, key=lambda tup: tup[0])
             dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
             dict_coordo_xyz_labels[im].update({'G': coordos_sorted_x[0]})
-            dict_coordo_xyz_labels[im].update({'T2': coordos_sorted_x[1]})
+            dict_coordo_xyz_labels[im].update({'T2': coordos_sorted_x[1]}) """
 
     def analyse(self):
         timer_debut_analyse = time.process_time_ns()
@@ -726,10 +745,10 @@ class MyApp(Widget):
             analyse_eff = True
             if self.ids.check_new.state == 'down' or 'coordonnees_xyz.csv' not in os.listdir(path+'/Positions/'):
                 self.coordo_xyz_marqueurs()
-                if nb_marqueurs in [5, 6]:
+                """ if nb_marqueurs in [5, 6]:
                     self.labelize_5()
                 if nb_marqueurs in [8, 9]:
-                    self.labelize_8()
+                    self.labelize_8() """
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
@@ -794,7 +813,14 @@ class MyApp(Widget):
 
             rachis_x = np.degrees(np.arctan((coordo['L'][0] - coordo['C'][0])/(coordo['L'][1] - coordo['C'][1])))
             dict_metriques['angle_rachis'].append(rachis_x)
-            rachis_h = [coordo['L'][0], coordo['T'][0], coordo['C'][0]] #positions horizontales
+            try:
+                rachis_h = [coordo['L'][0], coordo['T'][0], coordo['C'][0]] #positions horizontales
+            except KeyError:
+                try:
+                    rachis_h = [coordo['L'][0], coordo['T1'][0], coordo['T2'][0], coordo['C'][0]]
+                except KeyError:
+                    rachis_h = [np.nan, np.nan, np.nan]
+
             var_rachis = np.std(rachis_h)/abs(np.mean(rachis_h)) #devrait être nulle pour un alignement parfait
             dict_metriques['var_rachis'].append(var_rachis)
 
@@ -881,30 +907,58 @@ class MyApp(Widget):
         plt.tight_layout()
     
     # Calculer les distances des marqueurs de chaque frame au gold frame
+    def gold_nb_input(self):
+        global gold_nb
+        txt = self.ids.input_gold_nb.text
+        if len(txt) > 0 and 0 < int(txt) < images_total:
+            gold_nb = int(self.ids.input_gold_nb.text)
+            self.ids.im_best.color = (1,0,0,1)
+        else:
+            gold_nb = max_sym_im
+            self.ids.im_best.color = (1,1,1,1)
+        
+        self.erase_distances()
+        self.show_distances()
+        
     def distance_to_gold(self):
         global gold_nb
         global max_sym_im
-        gold_nb = max_sym_im
 
-        marker_array = np.zeros((len(os.listdir(path+'/Preprocessed/')), 8, 3))
-    
-        with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=';')
-            j = 0
-            for row in reader: #skip headline
-                if j == 0:
-                    entete = row[1::3]
-                    labels = [e[:-2] for e in entete]
-                elif j > 0:
-                    im = int(row[0])
-                    row = [float(i) for i in row[1:]]
-                    row_by_label = [[row[3*i], row[3*i+1], row[3*i+2]] for i in range(0,int(len(row)/3))]
-                    marker_array[im-1] = row_by_label
-                j += 1
+        try:
+            if not type(gold_nb) == int:
+                gold_nb = max_sym_im
+        except NameError:
+            gold_nb = max_sym_im
 
-        distances = np.zeros((len(marker_array[:,0,0]), 8, 3))
+        marker_array = np.zeros((len(os.listdir(path+'/Preprocessed/')), nb_marqueurs, 3))
+
+        try:
+            with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
+                reader = csv.reader(csvfile, delimiter=';')
+                j = 0
+                for row in reader: #skip headline
+                    if j == 0:
+                        entete = row[1::3]
+                        labels = [e[:-2] for e in entete]
+                    elif j > 0:
+                        im = int(row[0])
+                        row = [float(i) for i in row[1:]]
+                        row_by_label = [[row[3*i], row[3*i+1], row[3*i+2]] for i in range(0,int(len(row)/3))]
+                        marker_array[im-1] = row_by_label
+                    j += 1
+
+        except FileNotFoundError:
+            self.ids.button_distances.state = 'normal'
+            if analyse_eff:
+                if not 'Metriques' in os.listdir(path):
+                    os.mkdir(path+'/Metriques', )
+                if not 'Positions' in os.listdir(path):
+                    os.mkdir(path+'\\Positions', )
+                self.save_metriques()
+
+        distances = np.zeros((len(marker_array[:,0,0]), nb_marqueurs, 3))
         for i in range(len(marker_array[:,0,0])):
-            distances[i] = np.subtract(marker_array[i], marker_array[gold_nb-1])
+            distances[i] = np.subtract(marker_array[gold_nb-1], marker_array[i])
         
         return distances, labels
     
@@ -915,11 +969,17 @@ class MyApp(Widget):
             y = 0.85 - (coordinates[1]/im_dim[0])*0.78
             with self.canvas:
                 Color(245/255,168/255,2/255,1)
-                Line(circle=(self.width*x, self.height*y,6,0,360), width=1.1, group=u"circle") #(center_x, center_y, radius, angle_start, angle_end, segments)
-    
+                Line(circle=(self.width*x, self.height*y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
+
+    def toggle_distances(self):
+        if self.ids.button_distances.state == 'down':
+            self.show_distances()
+        elif self.ids.button_distances.state == 'normal':
+            self.erase_distances()
 
     # Afficher les distances sur l'image actuelle, une fois l'analyse effectuée
     def show_distances(self):
+        
         distances, labels = self.distance_to_gold()
         self.show_marqueurs_gold()
 
@@ -930,15 +990,21 @@ class MyApp(Widget):
             dist_act.update({l: distances[image_nb-1][i]})
 
         self.Distances = Widget()
+        print(dict_coordo_labels_manual)
         for l in labels:
-            coordinates = dict_coordo_labels_manual[f'image{image_nb}'][l]
+            coordinates = dict_coordo_labels_manual[f'image{gold_nb}'][l]
             x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
             y = 0.85 - (coordinates[1]/im_dim[0])*0.78
-            self.dist_txt = Label(text=f'{l}\nX : {-dist_act[l][0]:.0f}\nY : {-dist_act[l][1]:.0f}\nZ : {-dist_act[l][2]:.0f}',
+            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]:.0f}\nY : {dist_act[l][1]:.0f}\nZ : {dist_act[l][2]:.0f}',
                                 fontsize='10sp', color=(1,1,1,1), size_hint=(.2, .2), pos=(self.width*x, self.height*y))
             self.Distances.add_widget(self.dist_txt)
 
         self.add_widget(self.Distances)
+
+    # efface annotations précécentes (surtout utile si changement du gold_nb)
+    def erase_distances(self):
+        self.remove_widget(self.Distances)
+        self.canvas.remove_group(u"circle_gold")
 
     # Sauvegarder les informations souhaitées selon ce qui est coché
     def to_save(self):

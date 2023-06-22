@@ -40,10 +40,12 @@
             size_hint: (.28, .04)
             pos_hint: {'x':.08, 'top':.95}
         Label:
+            id: nb_marqueurs
             text: 'Nombre de marqueurs :'
             font_size: 15
             size_hint: (.1, .05)
             pos_hint:{'x':.38, 'top':.95}
+            color: 1,1,1,1
         TextInput:
             id: marq_nb_input
             text: ''
@@ -149,7 +151,7 @@
                 id: button_distances
                 text: "Afficher les distances\nentre marqueurs"
                 on_press: root.press_color()
-                on_press: root.show_distances()
+                on_press: root.toggle_distances()
         Image: #système d'axes
             id: xyz_axis
             size_hint: (0, 0)
@@ -284,6 +286,14 @@
             halign:'left'
             pos_hint:{'x':.4, 'top':.13}
             size_hint:(.1, .02)
+        TextInput:
+            id:input_gold_nb
+            multiline: False
+            text: ''
+            font_size: 15
+            size_hint: (.02, .03)
+            pos_hint:{'x':.48, 'top':.135}
+            on_text_validate: root.gold_nb_input()
         Label:
             id:sym_best
             text: 'Score :'
