@@ -44,14 +44,14 @@
             text: 'Nombre de marqueurs :'
             font_size: 15
             size_hint: (.1, .05)
-            pos_hint:{'x':.38, 'top':.95}
+            pos_hint:{'x':.38, 'top':.98}
             color: 1,1,1,1
         TextInput:
             id: marq_nb_input
             text: ''
             font_size: 15
             size_hint: (.02, .045)
-            pos_hint:{'x':.48, 'top':.95}
+            pos_hint:{'x':.48, 'top':.98}
             multiline: False
             on_text_validate: root.nb_marqueurs_input()
         Label:
@@ -101,8 +101,8 @@
         BoxLayout:
             orientation:"vertical"
             spacing:5
-            pos_hint:{'x':.38, 'top':.89}
-            size_hint:{.14, .58}
+            pos_hint:{'x':.38, 'top':.92}
+            size_hint:{.14, .62}
             ToggleButton:
                 id: button_showmarks
                 text:"Afficher les\nmarqueurs"
@@ -152,6 +152,11 @@
                 text: "Afficher les distances\nentre marqueurs"
                 on_press: root.press_color()
                 on_press: root.toggle_distances()
+            ToggleButton:
+                id: button_profondeur
+                text: "Afficher les cartes\nde profondeur"
+                on_press: root.press_color()
+                on_press: root.show_profondeur()
         Image: #système d'axes
             id: xyz_axis
             size_hint: (0, 0)
@@ -168,7 +173,7 @@
             id: label_input
             text: ''
             font_size: 15
-            size_hint: (.048, .045)
+            size_hint: (.04, .04)
             pos_hint:{'x':.46, 'top':.28}
             multiline: False
             on_text_validate: root.label_in()
