@@ -1029,7 +1029,7 @@ class MyApp(Widget):
                 z = xyz[:,:,2].T
                 z = z[-1:0:-1, :][h1:h2, w1:w2]
                 z_int = z.astype(np.uint32)
-                z_int[np.where(z < np.min(z_int)+100)] = 0
+                z_int[np.where(z > np.max(z_int)-100)] = 0
                 z_eq = self.equalize_histogram(z_int, np.max(z_int))
                 z_filtered = median_filter(z_eq, 3)
             
