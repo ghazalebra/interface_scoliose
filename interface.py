@@ -20,7 +20,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splev, splrep
-from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.ndimage import gaussian_filter1d, median_filter, gaussian_filter
 
 import read_raw_file as RRF
 import marker_detection
@@ -61,9 +61,12 @@ class MyApp(Widget):
         global path
         path = self.ids.path_input.text
         save_path = path+'/intensity/'
+        global save_path_xyz
         save_path_xyz = path+'/xyz/'
         global save_path_im
-        save_path_im = path+'/Preprocessed'
+        save_path_im = path+'/Preprocessed/'
+        global save_path_depth
+        save_path_depth = path+'/depth/'
 
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
@@ -71,6 +74,7 @@ class MyApp(Widget):
             os.makedirs(path+'/landmarks/', exist_ok=True)
             os.makedirs(save_path_xyz, exist_ok=True)
             os.makedirs(save_path_im, exist_ok=True)
+            os.makedirs(save_path_depth, exist_ok = True)
             # lit les fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
@@ -191,7 +195,12 @@ class MyApp(Widget):
     def show_image(self):
         self.ids.image_nb_input.text = f'{image_nb}'
         self.ids.image_show.clear_widgets()
-        self.ids.image_show.source = os.path.join(save_path_im, os.listdir(save_path_im)[image_nb-1])
+
+        if self.ids.button_profondeur.state == 'normal':
+            self.ids.image_show.source = os.path.join(save_path_im, os.listdir(save_path_im)[image_nb-1])
+        if self.ids.button_profondeur.state == 'down':
+            self.ids.image_show.source = os.path.join(save_path_depth, os.listdir(save_path_depth)[image_nb-1])
+
         self.canvas.remove_group(u"circle") # efface les cercles verts des marqueurs
         self.ids.rep_continuity.text = ''
         
@@ -350,7 +359,7 @@ class MyApp(Widget):
         # Affichage des marqueurs si bouton activé
         if detection_eff == True:
             for coordinates in dict_coordo[f'image{image_nb}']:
-                x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
+                x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03 # calcul des coordonnées sur l'écran à partir de celles sur l'image
                 y = 0.85 - (coordinates[1]/im_dim[0])*0.78
                 with self.canvas:
                     Color(0,1,0,1)
@@ -380,6 +389,7 @@ class MyApp(Widget):
                 txt_multiline = ''
                 i = len(txt)
                 count = 0
+                # formattage du texte à afficher (lignes multiples)
                 for im in im_prob_nb:
                     txt += f'{im}, '
                 for n in range(len(txt)):
@@ -414,7 +424,6 @@ class MyApp(Widget):
                             dict_coordo_labels_manual[f'image{image_nb}'] = {m: c for m, c in dict_coordo_labels_manual[f'image{image_nb}'].items() if c in dict_coordo[f'image{image_nb}']}
                         if labelize_extent == True:
                             self.extend_labelisation()
-                        #self.labelize()
                         if self.ids.button_verif_continuity.state == 'down':
                             self.verif_continuity()
                         self.show_image()
@@ -436,8 +445,7 @@ class MyApp(Widget):
             d = 5
             Ellipse(pos=(x - d/2, y - d/2), size=(d, d), group=u"new_mark")
         dict_coordo[f'image{image_nb}'].append([m_pos[0], m_pos[1]])
-        
-        #self.labelize()
+
         if labelize_extent == True:
             self.extend_labelisation()
         self.show_image()
@@ -462,16 +470,14 @@ class MyApp(Widget):
                     if c == [np.nan, np.nan]:
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
-                    # Modification des marqueurs loin de leur courbe d'inteprolation
+                    # Modification des marqueurs loin de leur courbe d'interpolation
                     if (abs(c[0] - c_interpolate[0]) > 5 or abs(c[1] - c_interpolate[1]) > 5) and c in dict_coordo[f'image{im}']:
                         dict_coordo[f'image{im}'].remove(c)
                         dict_coordo[f'image{im}'].append(c_interpolate)
                         dict_coordo_labels_manual[f'image{im}'][l] = c_interpolate
-
-        #self.labelize()
         self.show_image()
     
-    # Fonction pour détecter les discontinuités (changement important de pente) ...de moins en moins utile avec l'inteprolation
+    # Fonction pour détecter les discontinuités (changement important de pente) ...de moins en moins utile avec l'interpolation
     def verif_continuity(self):
         im_prob_continuity = {}
         if detection_eff:
@@ -554,7 +560,7 @@ class MyApp(Widget):
         if self.ids.button_graph_continuity.state == 'normal':
             self.ids.graph.clear_widgets()
 
-    # Fonction de labelisation par régions, fonctionne peu importe le nombre de marqueurs (était utilisé pour le Participant 1 à l'hiver)
+    # Fonction de labelisation par régions, fonctionne peu importe le nombre de marqueurs (était utilisé pour le Participant 1 à l'hiver 2023)
     """ def labelize(self):
         global dict_coordo_labels1
         dict_coordo_labels1 = {}
@@ -590,7 +596,7 @@ class MyApp(Widget):
             # Trouve le marqueur le plus près pour lui associer le label
                 for c in dict_coordo[f'image{image_nb}']:
                     if abs(m_pos[0]-c[0]) < 20 and abs(m_pos[1]-c[1]) < 20:
-                        # ajout d'un cercle bleu pa^le pour montrer qu'un marqueur est sélectionné
+                        # ajout d'un cercle bleu pâle pour montrer qu'un marqueur est sélectionné
                         with self.canvas:
                             Color(171/255.0, 222/255.0, 231/255.0, .8)
                             d = 7
@@ -604,7 +610,6 @@ class MyApp(Widget):
     # Entre le label du marqueur sélectionne dans le tableau et dans le dictionnaire, extend labelisation si tous les marqueurs labellisés
     def label_in(self):
         label = self.ids.label_input.text
-        #self.ids.label_input.text = ''
         self.canvas.remove_group(u"label")
 
         if m_to_label != [np.nan, np.nan]:
@@ -908,7 +913,7 @@ class MyApp(Widget):
         
         plt.tight_layout()
     
-    # Calculer les distances des marqueurs de chaque frame au gold frame
+    # Définir le numéro du gold frame (par défaut, meilleure symétrie, sinon input)
     def gold_nb_input(self):
         global gold_nb
         txt = self.ids.input_gold_nb.text
@@ -921,7 +926,8 @@ class MyApp(Widget):
         
         self.erase_distances()
         self.show_distances()
-        
+    
+    # Calculer les distances des marqueurs de chaque frame au gold frame
     def distance_to_gold(self):
         global gold_nb
         global max_sym_im
@@ -949,6 +955,7 @@ class MyApp(Widget):
                         marker_array[im-1] = row_by_label
                     j += 1
 
+        # enregistre métriques (positions xyz) si absentes afin de calculer les distances
         except FileNotFoundError:
             self.ids.button_distances.state = 'normal'
             if analyse_eff:
@@ -973,6 +980,7 @@ class MyApp(Widget):
                 Color(245/255,168/255,2/255,1)
                 Line(circle=(self.width*x, self.height*y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
 
+    # Affiche ou efface les distances selon l'état du bouton
     def toggle_distances(self):
         if self.ids.button_distances.state == 'down':
             self.show_distances()
@@ -1007,6 +1015,34 @@ class MyApp(Widget):
     def erase_distances(self):
         self.remove_widget(self.Distances)
         self.canvas.remove_group(u"circle_gold")
+    
+
+    def equalize_histogram(self, img, max):
+        [M, N]=img.shape
+        # Calcul de la transformation
+        T=1/(M*N)*np.cumsum(np.histogram(img, bins=max+1, range=(0, max))[0])
+        img_eq=255*T[img]
+        return img_eq
+
+    def show_profondeur(self):
+        if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
+            for file in os.listdir(save_path_xyz):
+                with open(os.path.join(save_path_xyz, file), 'r') as f:
+                    f.seek(RRF.header_size)
+                    xyz = np.fromfile(f, np.float32).reshape((RRF.h,RRF.w,3))
+                
+                z = xyz[:,:,2].T
+                z = z[-1:0:-1, :][h1:h2, w1:w2]
+                z_int = z.astype(np.uint32)
+                z_int[np.where(z < np.min(z_int)+100)] = 0
+                z_eq = self.equalize_histogram(z_int, np.max(z_int))
+                z_filtered = median_filter(z_eq, 3)
+            
+                plt.imsave(save_path_depth + file[:-3] + 'z.png', z_filtered)
+
+        if self.ids.button_profondeur.state == 'down':
+            self.ids.image_show.source = os.path.join(save_path_depth, os.listdir(save_path_depth)[image_nb-1])
+
 
     # Sauvegarder les informations souhaitées selon ce qui est coché
     def to_save(self):
