@@ -1,3 +1,8 @@
+import os
+import sys
+if sys.__stdout__ is None or sys.__stderr__ is None:
+    os.environ['KIVY_NO_CONSOLELOG'] = '1'
+
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.config import Config
@@ -7,7 +12,6 @@ from kivy.graphics import Color, Line, Ellipse
 from kivy.uix.label import Label
 from kivy.garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 
-import os
 import json
 import cv2
 import csv
@@ -20,6 +24,7 @@ from scipy.ndimage import gaussian_filter1d, median_filter
 
 import read_raw_file as RRF
 import marker_detection
+
 
 class MyApp(Widget):
     Window.maximize()
