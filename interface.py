@@ -1038,7 +1038,7 @@ class MyApp(Widget):
                 z_eq = self.equalize_histogram(z_int, np.max(z_int))
                 z_filtered = median_filter(z_eq, 3)
             
-                plt.imsave(save_path_depth + file[:-3] + 'z.png', z_filtered)
+                plt.imsave(save_path_depth + file[:-4] + '_z.png', z_filtered)
 
         if self.ids.button_profondeur.state == 'down':
             self.ids.image_show.source = os.path.join(save_path_depth, os.listdir(save_path_depth)[image_nb-1])
