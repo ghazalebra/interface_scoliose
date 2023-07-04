@@ -767,7 +767,7 @@ class MyApp(Widget):
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
 
-                for im, coordo in dict_coordo_xyz_labels.items():
+                for im, coordo in dict_coordo_xyz_labels_r.items():
                     scap_y = np.degrees(np.arctan((coordo['D'][1] - coordo['G'][1])/(coordo['D'][0] - coordo['G'][0])))
                     dict_metriques['angle_scap_vert'].append(scap_y)
                     scap_z = np.degrees(np.arctan((coordo['G'][2] - coordo['D'][2])/(coordo['D'][0] - coordo['G'][0]))) #ajouter avec z
@@ -1039,23 +1039,20 @@ class MyApp(Widget):
             R = markers_r.get_rotation_matrix_from_xyz((0, rx, -rz))
             markers_r.rotate(R, center=(IG[0], IG[1], IG[2]))
             dict_coordo_xyz_rotated.update({f'image{i+1}': np.asarray(markers_r.points)})
-
-            print(dict_coordo_xyz_rotated)
         
         global dict_coordo_xyz_labels_r
         dict_coordo_xyz_labels_r = {}
         for i, (coordo, coordo_r) in enumerate(zip(dict_coordo_xyz_labels.values(), dict_coordo_xyz_rotated.values())):
             for l in coordo.keys():
-                dist_prec = 0
+                dist = []
                 c = coordo[l]
                 for cr in coordo_r:
-                    dist = np.sqrt((c[0]-cr[0])**2+(c[1]-cr[1])**2+(c[2]-cr[2])**2)
-                    if dist < dist_prec:
-                        if f'image{i+1}' not in dict_coordo_xyz_labels_r:
-                            dict_coordo_xyz_labels_r.update({f'image{i+1}': {l : cr}})
-                        else:
-                            dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : cr})
-                    dist_prec = dist
+                    dist.append(np.sqrt((c[0]-cr[0])**2+(c[1]-cr[1])**2+(c[2]-cr[2])**2))
+                ind = dist.index(min(dist))
+                if f'image{i+1}' not in dict_coordo_xyz_labels_r:
+                    dict_coordo_xyz_labels_r.update({f'image{i+1}': {l : coordo_r[ind]}})
+                else:
+                    dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : coordo_r[ind]})
 
         print(dict_coordo_xyz_labels_r)
             
