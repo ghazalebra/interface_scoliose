@@ -17,10 +17,15 @@ import cv2
 import csv
 import math
 import time
+import open3d as o3d
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colormaps as cm
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.colors import ListedColormap
 from scipy.interpolate import splev, splrep
-from scipy.ndimage import gaussian_filter1d, median_filter, gaussian_filter
+from scipy.ndimage import gaussian_filter1d, median_filter
 
 import read_raw_file as RRF
 import marker_detection
@@ -756,6 +761,8 @@ class MyApp(Widget):
                     self.labelize_5()
                 if nb_marqueurs in [8, 9]:
                     self.labelize_8() """
+            
+            self.rotate_markers()
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
@@ -1016,13 +1023,63 @@ class MyApp(Widget):
         self.remove_widget(self.Distances)
         self.canvas.remove_group(u"circle_gold")
     
+    def rotate_markers(self):
+        dict_coordo_xyz_rotated = {}
 
-    def equalize_histogram(self, img, max):
+        ID = dict_coordo_xyz_labels['image1']['ID']
+        IG = dict_coordo_xyz_labels['image1']['IG']
+        print(f'ID : {ID}, IG : {IG}')
+        rz = math.atan((ID[1] - IG[1])/(ID[0] - IG[0]))
+        rx = math.atan((ID[2] - IG[2])/(ID[0] - IG[0]))
+
+        for i in range(images_total):
+            markers_r = o3d.geometry.PointCloud()
+            markers_points = dict_coordo_xyz_labels[f'image{i+1}'].values()
+            markers_r.points = o3d.utility.Vector3dVector(markers_points)
+            R = markers_r.get_rotation_matrix_from_xyz((0, rx, -rz))
+            markers_r.rotate(R, center=(IG[0], IG[1], IG[2]))
+            dict_coordo_xyz_rotated.update({f'image{i+1}': np.asarray(markers_r.points)})
+
+            print(dict_coordo_xyz_rotated)
+        
+        global dict_coordo_xyz_labels_r
+        dict_coordo_xyz_labels_r = {}
+        for i, (coordo, coordo_r) in enumerate(zip(dict_coordo_xyz_labels.values(), dict_coordo_xyz_rotated.values())):
+            for l in coordo.keys():
+                dist_prec = 0
+                c = coordo[l]
+                for cr in coordo_r:
+                    dist = np.sqrt((c[0]-cr[0])**2+(c[1]-cr[1])**2+(c[2]-cr[2])**2)
+                    if dist < dist_prec:
+                        if f'image{i+1}' not in dict_coordo_xyz_labels_r:
+                            dict_coordo_xyz_labels_r.update({f'image{i+1}': {l : cr}})
+                        else:
+                            dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : cr})
+                    dist_prec = dist
+
+        print(dict_coordo_xyz_labels_r)
+            
+    def rotate_pc(self):
+        savepath_pc = path + '/xyz_rotated'
+        os.makedirs(savepath_pc, exist_ok=True)
+
+    def equalize_histogram(self, img, max, w):
         [M, N]=img.shape
         # Calcul de la transformation
-        T=1/(M*N)*np.cumsum(np.histogram(img, bins=max+1, range=(0, max))[0])
-        img_eq=255*T[img]
+        counts, bins = np.histogram(img, bins=max+1, range=(0,max-1))
+        T = 1/(np.count_nonzero(w))*np.cumsum(counts)
+
+        img_eq = max*np.ones((img.shape))
+        img_eq[w]=(max-50)*T[img[w]]
+        
         return img_eq
+    
+    def white_in_cmp(self, cmap, pos, len):
+        cmap_initial = cm[cmap]
+        newcolors = cmap_initial(np.linspace(0,1,len))
+        newcolors[pos, :] = np.array([1,1,1,1])
+        newcmp = ListedColormap(newcolors)
+        return newcmp
 
     def show_profondeur(self):
         if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
@@ -1031,14 +1088,28 @@ class MyApp(Widget):
                     f.seek(RRF.header_size)
                     xyz = np.fromfile(f, np.float32).reshape((RRF.h,RRF.w,3))
                 
+                xyz = xyz.astype(np.uint16)
                 z = xyz[:,:,2].T
                 z = z[-1:0:-1, :][h1:h2, w1:w2]
-                z_int = z.astype(np.uint32)
-                z_int[np.where(z > np.max(z_int)-100)] = 0
-                z_eq = self.equalize_histogram(z_int, np.max(z_int))
-                z_filtered = median_filter(z_eq, 3)
-            
-                plt.imsave(save_path_depth + file[:-4] + '_z.png', z_filtered)
+                z = median_filter(z, 5)
+                z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
+                
+                weights = np.ones((z.shape))
+                weights[z > np.max(z)-70] = 0
+                weights = weights.astype(bool)
+
+                z_eq = self.equalize_histogram(z, np.max(z), weights)
+                
+                fig, ax = plt.subplots(1,1, figsize=(6, 7.2))
+                plt.imshow(z_eq, cmap = self.white_in_cmp('magma', -1, int(np.max(z_eq))))
+                plt.subplots_adjust(left = 0, right = 1, top = 1, bottom = 0)
+                plt.axis('off')
+
+                cbaxes = inset_axes(ax, width="3%", height="30%", loc='upper right', bbox_to_anchor=(0, 0, .9, 1), bbox_transform=ax.transAxes)
+                plt.colorbar(cax=cbaxes)
+
+                plt.savefig(save_path_depth + file[:-4] + '_z.png')
+                plt.close()
 
         if self.ids.button_profondeur.state == 'down':
             self.ids.image_show.source = os.path.join(save_path_depth, os.listdir(save_path_depth)[image_nb-1])
