@@ -57,6 +57,8 @@ class MyApp(Widget):
         detection_eff = False
         global labelize_extent
         labelize_extent = False
+        global markers_rotated
+        markers_rotated = False
 
         # Initie la variable pour numéro de l'image affichée à 1 pour voir la première image
         global image_nb
@@ -254,6 +256,10 @@ class MyApp(Widget):
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Coordonnées (x,y,z)', color=(0,0,0,1)))
             d_im = dict_coordo_xyz_labels[f'image{image_nb}']
+
+            if markers_rotated:
+                d_im = dict_coordo_xyz_labels_r[f'image{image_nb}'] # affiche les coordonnées après rotation si effectuée
+
             for key, l in zip(d_im.keys(), labels):
                 self.ids.grid.add_widget(Label(text=f'{l}', color=(0,0,0,1)))
                 if l in dict_coordo_labels_manual[f'image{image_nb}']:
@@ -842,10 +848,10 @@ class MyApp(Widget):
 
     # Calcule des métriques pour 8 marqueurs
     def analyse_8(self):
-        dict_metriques = {'angle_psis': [], 'scoliosis': []}
+        dict_metriques = {'dejettement': [], 'scoliosis': []}
         for im, coordo in dict_coordo_xyz_labels.items():
-            psis_y = np.degrees(np.arctan((coordo['ID'][1] - coordo['IG'][1])/(coordo['ID'][0] - coordo['IG'][0])))
-            dict_metriques['angle_psis'].append(psis_y)
+            dejet = (coordo['ID'][0]+coordo['IG'][0])/2 - coordo['C'][0]
+            dict_metriques['dejettement'].append(dejet)
             
             a = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
             b = np.sqrt((coordo['T2'][0]-coordo['L'][0])**2+(coordo['T2'][1]-coordo['L'][1])**2)
@@ -863,7 +869,7 @@ class MyApp(Widget):
     # Calcule le score global de chaque image et trouve le maximum de symétrie atteint (score et #image)
     def max_symmetry(self):
         dict_metriques.update({'scores': np.zeros(images_total)})
-        for metriques in dict_metriques.values():
+        for metriques in [dict_metriques['scoliosis'], dict_metriques['dejettement']]:
             for i in range(len(metriques)):
                 m = metriques[i]
                 pond = self.map_metriques(m, metriques)
@@ -903,10 +909,10 @@ class MyApp(Widget):
             ax4.set_ylabel('Variabilité', fontsize=9)
         
         elif nb_marqueurs in[8,9]:
-            metrique_3 = 'angle_psis'
+            metrique_3 = 'dejettement'
             metrique_4 = 'scoliosis'
-            ax3.set_title("Angle vertical entre les PSIS", fontsize=9)
-            ax3.set_ylabel('Angle (degrés)', fontsize=9)
+            ax3.set_title('Déjettement (> 0 = gauche | < 0 = droit)', fontsize=9)
+            ax3.set_ylabel('Distance (mm)', fontsize=9)
             ax4.set_title('Angle de scoliose', fontsize=9)
             ax4.set_ylabel('180 - Angle (degrés)', fontsize=9)
 
@@ -1036,8 +1042,10 @@ class MyApp(Widget):
             markers_r = o3d.geometry.PointCloud()
             markers_points = dict_coordo_xyz_labels[f'image{i+1}'].values()
             markers_r.points = o3d.utility.Vector3dVector(markers_points)
-            R = markers_r.get_rotation_matrix_from_xyz((0, rx, -rz))
-            markers_r.rotate(R, center=(IG[0], IG[1], IG[2]))
+
+            global matrix_R
+            matrix_R = markers_r.get_rotation_matrix_from_xyz((0, rx, -rz))
+            markers_r.rotate(matrix_R, center=(IG[0], IG[1], IG[2]))
             dict_coordo_xyz_rotated.update({f'image{i+1}': np.asarray(markers_r.points)})
         
         global dict_coordo_xyz_labels_r
@@ -1055,13 +1063,35 @@ class MyApp(Widget):
                     dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : coordo_r[ind]})
 
         print(dict_coordo_xyz_labels_r)
-            
-    def rotate_pc(self):
-        savepath_pc = path + '/xyz_rotated'
-        os.makedirs(savepath_pc, exist_ok=True)
+        global markers_rotated
+        markers_rotated = True
+
+    def rotate_xyz(self):
+        global save_path_xyzr
+        save_path_xyzr = path + '/xyz_rotated/'
+        os.makedirs(save_path_xyzr, exist_ok=True)
+
+        if len(os.listdir(save_path_xyzr)) == 0:
+            for file in os.listdir(save_path_xyz):
+                with open(os.path.join(save_path_xyz, file), 'r') as f:
+                    f.seek(RRF.header_size)
+                    xyz = np.fromfile(f, np.float32).reshape((RRF.h*RRF.w,3))
+
+                xyz_r = np.matmul(xyz, matrix_R)
+                xyz_r = np.asarray(xyz_r).reshape((RRF.h,RRF.w,3))
+
+                xyz_tr = np.ndarray((1936, 1176, 3))
+                xyz_tr[:,:,0] = xyz_r[:,:,0].T
+                xyz_tr[:,:,1] = xyz_r[:,:,1].T
+                xyz_tr[:,:,2] = xyz_r[:,:,2].T
+
+                xyz_tr = xyz_tr[-1:0:-1, :]
+
+                cv2.imwrite(save_path_xyzr + file[:-4]+ '.png', xyz_tr)
+        
+        self.show_profondeur()
 
     def equalize_histogram(self, img, max, w):
-        [M, N]=img.shape
         # Calcul de la transformation
         counts, bins = np.histogram(img, bins=max+1, range=(0,max-1))
         T = 1/(np.count_nonzero(w))*np.cumsum(counts)
@@ -1080,14 +1110,15 @@ class MyApp(Widget):
 
     def show_profondeur(self):
         if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
-            for file in os.listdir(save_path_xyz):
-                with open(os.path.join(save_path_xyz, file), 'r') as f:
-                    f.seek(RRF.header_size)
-                    xyz = np.fromfile(f, np.float32).reshape((RRF.h,RRF.w,3))
+            for file in os.listdir(save_path_xyzr):
+                xyz = cv2.imread(os.path.join(save_path_xyzr, file))
+
+                #with open(os.path.join(save_path_xyz, file), 'r') as f:
+                #    f.seek(RRF.header_size)
+                #    xyz = np.fromfile(f, np.float32).reshape((RRF.h,RRF.w,3))
                 
-                xyz = xyz.astype(np.uint16)
-                z = xyz[:,:,2].T
-                z = z[-1:0:-1, :][h1:h2, w1:w2]
+                z = xyz[:,:,2]
+                z = z[h1:h2, w1:w2]
                 z = median_filter(z, 5)
                 z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
                 
