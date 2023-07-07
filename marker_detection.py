@@ -7,12 +7,10 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import maximum_filter
 
 # input is an image (one frame of movement sequence)
-def annotate_single_frame(frame, z_nobg, w1, w2, h1, h2):
-
-    frame_display, preprocessed_frame = preprocess(frame, z_nobg, w1, w2, h1, h2)
+def annotate_single_frame(preprocessed_frame):
 
     key_points = detect_markers(preprocessed_frame)
-    im_with_key_points = cv2.drawKeypoints(frame_display, key_points, np.array([]), (0, 255, 0),
+    im_with_key_points = cv2.drawKeypoints(preprocessed_frame, key_points, np.array([]), (0, 255, 0),
                                            cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
     key_points = [key_points[j] for j in range(len(key_points))]
@@ -23,17 +21,15 @@ def annotate_single_frame(frame, z_nobg, w1, w2, h1, h2):
 # the function reads the files inside path/frames
 # The annotated frames will be saved in save_path/annotated_frames
 # The landmarks will be saved in save_path/landmarks
-def annotate_frames(path, w1, w2, h1, h2):
+def annotate_frames(path):
     i = 0
-    intensity_path = path + '/intensity/'
-    z_path = path + '/xyz_nobg/'
+    images_path = path + '/Preprocessed/'
     annotated_frame_path = path + '/annotated_frames/'
     landmark_path = path + '/landmarks/'
     os.makedirs(landmark_path, exist_ok=True)
-    for filename_i, filename_xyz in zip(os.listdir(intensity_path), os.listdir(z_path)):
-        frame_intensity = cv2.imread(os.path.join(intensity_path, filename_i))
-        xyz_nobg = cv2.imread(os.path.join(z_path, filename_xyz))
-        key_points, frame_with_key_points = annotate_single_frame(frame_intensity, xyz_nobg, w1, w2, h1, h2)
+    for filename_i in os.listdir(images_path):
+        preprocessed_frame = cv2.imread(os.path.join(images_path, filename_i))
+        key_points, frame_with_key_points = annotate_single_frame(preprocessed_frame)
         index_I = filename_i.find('_I') + 1
         annotated_file = filename_i[:index_I] + 'annotated_' + filename_i[index_I+2:]
         landmarks_file = 'landmarks_' + filename_i[index_I+2:]

@@ -20,6 +20,7 @@ import time
 import open3d as o3d
 import copy
 import numpy as np
+from tensorflow import linalg
 import matplotlib.pyplot as plt
 from matplotlib import colormaps as cm
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -69,7 +70,7 @@ class MyApp(Widget):
         path = self.ids.path_input.text
         save_path = path+'/intensity/'
         global save_path_xyz
-        save_path_xyz = path+'/xyz/'
+        save_path_xyz = path+'/xyz_images/'
         global save_path_im
         save_path_im = path+'/Preprocessed/'
         global save_path_depth
@@ -82,21 +83,23 @@ class MyApp(Widget):
             os.makedirs(save_path_xyz, exist_ok=True)
             os.makedirs(save_path_im, exist_ok=True)
             os.makedirs(save_path_depth, exist_ok = True)
+
             # lit les fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
             
+            # enregistre les fichiers _XYZ_.raw en png pour utilisation future des coordos xyz
+            if len(os.listdir(save_path_xyz)) == 0:
+                RRF.read_raw_xyz_frames(path)
+
             # définit les dimensions pour rogner les images
             self.automatic_crop()
 
             # crée les images Preprocessed pour consultation
             if len(os.listdir(save_path_im)) == 0:
-                for filename_i, filename_xyz in zip(os.listdir(save_path), os.listdir(path+'/xyz_nobg/')):
-                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, filename_i)), cv2.imread(os.path.join(path+'/xyz_nobg/', filename_xyz)), w1, w2, h1, h2)
+                for filename_i, filename_xyz in zip(os.listdir(save_path), os.listdir(save_path_xyz)):
+                    frame_display, preprocessed_frame = marker_detection.preprocess(cv2.imread(os.path.join(save_path, filename_i)), self.remove_bg(np.load(os.path.join(save_path_xyz, filename_xyz))), w1, w2, h1, h2)
                     cv2.imwrite(os.path.join(save_path_im, filename_i), preprocessed_frame)
-
-            if len(os.listdir(save_path_xyz)) == 0:
-                RRF.copy_xyz_frames(path, save_path_xyz)
 
             # Trouve le nombre d'images, définit le max du slider et le texte /tot
             global images_total
@@ -125,19 +128,25 @@ class MyApp(Widget):
         except FileNotFoundError:
             self.ids.label_ready.text = "Le chemin entré est introuvable. Essayez à nouveau."
 
+    # Prend une image xyz et retourne z en binaire 
+    def remove_bg(self, xyz):
+        z = xyz[:,:,2]
+
+        zz = z[np.where(z>0)]
+        body_z = np.median(zz)
+        z_nobg = z
+        z_nobg[np.where(z > body_z + 300)] = False
+        z_nobg = median_filter(z_nobg, 3)
+
+        return z_nobg
+
     # Trouve les paramètres pour rogner les images (utilisé pour preprocess (RRF) et marker_detection)
     def automatic_crop(self):
         timer_debut = time.process_time_ns()
 
-        path_nobg = path+'/xyz_nobg/'
-        if not 'xyz_nobg' in os.listdir(path):
-            os.mkdir(path_nobg)
-            RRF.read_raw_xyz_frames(path, path_nobg)
-
-        z_nobg = cv2.imread(os.path.join(path_nobg, os.listdir(path_nobg)[0]))
-        z_nobg = median_filter(z_nobg, 3)
-        print(z_nobg.shape)
-        body = np.argwhere(z_nobg[1000,:,0] > 100) #identifie points n'appartenant pas au bg, donc au corps du patient
+        xyz = np.load(os.path.join(save_path_xyz, os.listdir(save_path_xyz)[0]))
+        z_nobg = self.remove_bg(xyz)
+        body = np.argwhere(z_nobg[1000,:]) #identifie points n'appartenant pas au bg, donc au corps du patient
 
         #body_sorted = sorted(body, key=lambda list: list[1]) #tri selon x (coordos horizontalement)
         left = int(body[0])
@@ -148,10 +157,10 @@ class MyApp(Widget):
         global h1
         global h2
 
-        if 'BG' in os.listdir(path_nobg)[0]:
+        if 'BG' in os.listdir(path)[0]:
             w1 = left-50
             w2 = w1+600
-        elif 'BD' in os.listdir(path_nobg)[0]:
+        elif 'BD' in os.listdir(path)[0]:
             w2 = right+75
             w1 = w2-600
         else:
@@ -287,7 +296,7 @@ class MyApp(Widget):
             os.makedirs(path+'/annotated_frames/', exist_ok=True)
             # Détecte les marqueurs, crée images annotées et fichiers txt avec positions
             if len(os.listdir(path+'/annotated_frames/')) == 0: #or self.ids.check_new.state == 'down':
-                marker_detection.annotate_frames(path, w1, w2, h1, h2)
+                marker_detection.annotate_frames(path)
         
         global dict_coordo
         dict_coordo = {}
@@ -378,6 +387,9 @@ class MyApp(Widget):
         # Efface les marqueurs si bouton désactivé
         if self.ids.button_showmarks.state == 'normal':
             self.canvas.remove_group(u"circle")
+        
+        if self.ids.button_distances.state == 'down':
+            self.canvas.remove_group(u"circle_gold")
 
     # Fonction pour vérifier le nombre de marqueurs détectés pour toutes les images du répertoire
     # (avec dictionnaire de coordonnées créé)
@@ -700,9 +712,8 @@ class MyApp(Widget):
         dict_coordo_xyz_labels = {}
         global save_xyz
         save_xyz = path+'/XYZ_converted/'
+        os.makedirs(save_xyz, exist_ok=True)
         # Lis les xyz.raw et crée les fichiers contenant les x,y,z des marqueurs
-        if not 'XYZ_converted' in os.listdir(path):
-            os.mkdir(save_xyz, )
 
         for key in dict_coordo_labels_manual.keys():
             dict_coordo[key] = list(dict_coordo_labels_manual[key].values())
@@ -863,7 +874,7 @@ class MyApp(Widget):
 
     # Calcule le score d'une métrique pour une image selon toutes les métriques de cette catégorie
     def map_metriques(self, m, metriques):
-        pond = 20*(1 - abs(m)/np.max(np.absolute(metriques)))
+        pond = 50*(1 - abs(m)/np.max(np.absolute(metriques)))
         return pond
     
     # Calcule le score global de chaque image et trouve le maximum de symétrie atteint (score et #image)
@@ -951,7 +962,7 @@ class MyApp(Widget):
         except NameError:
             gold_nb = max_sym_im
 
-        marker_array = np.zeros((len(os.listdir(path+'/Preprocessed/')), nb_marqueurs, 3))
+        marker_array = np.zeros((images_total, nb_marqueurs, 3))
 
         try:
             with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
@@ -978,7 +989,8 @@ class MyApp(Widget):
                     os.mkdir(path+'\\Positions', )
                 self.save_metriques()
 
-        distances = np.zeros((len(marker_array[:,0,0]), nb_marqueurs, 3))
+        global distances
+        distances = np.zeros((images_total, nb_marqueurs, 3))
         for i in range(len(marker_array[:,0,0])):
             distances[i] = np.subtract(marker_array[gold_nb-1], marker_array[i])
         
@@ -987,8 +999,8 @@ class MyApp(Widget):
     # Afficher les marqueurs du gold frame
     def show_marqueurs_gold(self):
         for coordinates in dict_coordo[f'image{gold_nb}']:
-            x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
-            y = 0.85 - (coordinates[1]/im_dim[0])*0.78
+            x = ((coordinates[0] - dict_coordo_labels_manual[f'image{gold_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{image_nb}']['IG'][0])/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
+            y = 0.85 - ((coordinates[1] - dict_coordo_labels_manual[f'image{gold_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{image_nb}']['IG'][1] )/im_dim[0])*0.78
             with self.canvas:
                 Color(245/255,168/255,2/255,1)
                 Line(circle=(self.width*x, self.height*y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
@@ -1018,7 +1030,7 @@ class MyApp(Widget):
             coordinates = dict_coordo_labels_manual[f'image{gold_nb}'][l]
             x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
             y = 0.85 - (coordinates[1]/im_dim[0])*0.78
-            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]:.0f}\nY : {dist_act[l][1]:.0f}\nZ : {dist_act[l][2]:.0f}',
+            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]-dist_act["IG"][0]:.0f}\nY : {dist_act[l][1]-dist_act["IG"][1]:.0f}\nZ : {dist_act[l][2]-dist_act["IG"][2]:.0f}',
                                 fontsize='10sp', color=(1,1,1,1), size_hint=(.2, .2), pos=(self.width*x, self.height*y))
             self.Distances.add_widget(self.dist_txt)
 
@@ -1066,30 +1078,26 @@ class MyApp(Widget):
         global markers_rotated
         markers_rotated = True
 
-    def rotate_xyz(self):
-        global save_path_xyzr
-        save_path_xyzr = path + '/xyz_rotated/'
-        os.makedirs(save_path_xyzr, exist_ok=True)
+    def rotate_xyz(self, file):
+        """ with open(file, 'r') as f:
+            f.seek(RRF.header_size)
+            xyz = np.fromfile(f, np.float32).reshape((RRF.h*RRF.w, 3))
 
-        if len(os.listdir(save_path_xyzr)) == 0:
-            for file in os.listdir(save_path_xyz):
-                with open(os.path.join(save_path_xyz, file), 'r') as f:
-                    f.seek(RRF.header_size)
-                    xyz = np.fromfile(f, np.float32).reshape((RRF.h*RRF.w,3))
+        xyz_r = np.matmul(xyz, matrix_R)
+        xyz_r = xyz_r.reshape(RRF.h, RRF.w, 3) """
 
-                xyz_r = np.matmul(xyz, matrix_R)
-                xyz_r = np.asarray(xyz_r).reshape((RRF.h,RRF.w,3))
+        xyz = np.load(file)
 
-                xyz_tr = np.ndarray((1936, 1176, 3))
-                xyz_tr[:,:,0] = xyz_r[:,:,0].T
-                xyz_tr[:,:,1] = xyz_r[:,:,1].T
-                xyz_tr[:,:,2] = xyz_r[:,:,2].T
+        """ xyz_r = copy.deepcopy(xyz)
 
-                xyz_tr = xyz_tr[-1:0:-1, :]
+        for i in range(len(xyz[:,0,0])):
+            for j in range(len(xyz[0,:,0])):
+                xyz_ar = np.array([xyz[i,j]])
+                xyz_r[i,j] = np.matmul(xyz_ar, matrix_R) """
 
-                cv2.imwrite(save_path_xyzr + file[:-4]+ '.png', xyz_tr)
-        
-        self.show_profondeur()
+        xyz_r = linalg.matmul(xyz, matrix_R)
+
+        return np.asarray(xyz_r)
 
     def equalize_histogram(self, img, max, w):
         # Calcul de la transformation
@@ -1110,15 +1118,12 @@ class MyApp(Widget):
 
     def show_profondeur(self):
         if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
-            for file in os.listdir(save_path_xyzr):
-                xyz = cv2.imread(os.path.join(save_path_xyzr, file))
+            for file in os.listdir(save_path_xyz):
 
-                #with open(os.path.join(save_path_xyz, file), 'r') as f:
-                #    f.seek(RRF.header_size)
-                #    xyz = np.fromfile(f, np.float32).reshape((RRF.h,RRF.w,3))
+                xyz_r = self.rotate_xyz(os.path.join(save_path_xyz, file))
                 
-                z = xyz[:,:,2]
-                z = z[h1:h2, w1:w2]
+                z = xyz_r[:,:,2][h1:h2, w1:w2]
+                z = z.astype(int)
                 z = median_filter(z, 5)
                 z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
                 
