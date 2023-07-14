@@ -63,7 +63,7 @@
             id: image_show
             size_hint: ((.78/(600/root.height)*(500/root.width)), .78)
             background_color:(0,0,0,0)
-            pos_hint: {'x':.03, 'top':.85}
+            pos_hint: {'x':.025, 'top':.85}
             allow_stretch: True
             keep_ratio: False
             on_touch_down: root.pos_marqueur(args[1].pos)
@@ -95,8 +95,8 @@
             max: 1
             step: 1
             orientation:'horizontal' #default horizontal
-            size_hint: (.38, .04)
-            pos_hint: {'x':.01, 'top':.06}
+            size_hint: (.35, .04)
+            pos_hint: {'x':.02, 'top':.06}
             on_value: root.slider_pos(*args) # *args include name of the slider and position number
         BoxLayout:
             orientation:"vertical"

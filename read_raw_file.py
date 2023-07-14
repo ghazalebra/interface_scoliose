@@ -82,9 +82,9 @@ def find_xyz_coordinates(xyz_filename, marqueurs, w1, w2, h1, h2):
     # the image dimensions
     xyz_im = np.load(xyz_filename)
 
-    x_array = xyz_im[:,:,0]
-    y_array = xyz_im[:,:,1]
-    z_array = xyz_im[:,:,2]
+    x_array = xyz_im[:,:,0][h1:h2, w1:w2]
+    y_array = xyz_im[:,:,1][h1:h2, w1:w2]
+    z_array = xyz_im[:,:,2][h1:h2, w1:w2]
 
     coordos = []
     for l, el in marqueurs.items():

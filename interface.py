@@ -17,8 +17,8 @@ import cv2
 import csv
 import math
 import time
-import open3d as o3d
 import copy
+import open3d as o3d
 import numpy as np
 from tensorflow import linalg
 import matplotlib.pyplot as plt
@@ -87,11 +87,9 @@ class MyApp(Widget):
             # lit les fichiers .raw si pas déjà fait et crée les images
             if len(os.listdir(save_path)) == 0:
                 RRF.read_raw_intensity_frames(path, save_path)
-            
             # enregistre les fichiers _XYZ_.raw en png pour utilisation future des coordos xyz
             if len(os.listdir(save_path_xyz)) == 0:
                 RRF.read_raw_xyz_frames(path)
-
             # définit les dimensions pour rogner les images
             self.automatic_crop()
 
@@ -133,9 +131,14 @@ class MyApp(Widget):
         z = xyz[:,:,2]
 
         zz = z[np.where(z>0)]
-        body_z = np.median(zz)
-        z_nobg = z
-        z_nobg[np.where(z > body_z + 300)] = False
+        zz = zz[np.where(zz<2500)]
+        z_nobg = copy.deepcopy(z)
+        if 'Contraint' in os.listdir(save_path_xyz)[0]:
+            body_z = np.quantile(zz, 0.3)
+            z_nobg[np.where(z > body_z + 150)] = False
+        else:
+            body_z = np.median(zz)
+            z_nobg[np.where(z > body_z + 300)] = False
         z_nobg = median_filter(z_nobg, 3)
 
         return z_nobg
@@ -146,30 +149,35 @@ class MyApp(Widget):
 
         xyz = np.load(os.path.join(save_path_xyz, os.listdir(save_path_xyz)[0]))
         z_nobg = self.remove_bg(xyz)
-        body = np.argwhere(z_nobg[1000,:]) #identifie points n'appartenant pas au bg, donc au corps du patient
+        body_LR = np.argwhere(z_nobg[1250,:]) #identifie points n'appartenant pas au bg, donc au corps du patient
+        body_HL = np.argwhere(z_nobg[:,600])
 
-        #body_sorted = sorted(body, key=lambda list: list[1]) #tri selon x (coordos horizontalement)
-        left = int(body[0])
-        right = int(body[-1])
+        left = int(body_LR[0])
+        right = int(body_LR[-1])
 
         global w1
         global w2
         global h1
         global h2
 
-        if 'BG' in os.listdir(path)[0]:
+        if 'BG' in os.listdir(save_path_xyz)[0]:
+            print('BG')
+            w1 = np.max(left-100, 0)
+            w2 = right+50
+            h1 = int(body_HL[0])+150
+        elif 'BD' in os.listdir(save_path_xyz)[0]:
+            print('BD')
             w1 = left-50
-            w2 = w1+600
-        elif 'BD' in os.listdir(path)[0]:
-            w2 = right+75
-            w1 = w2-600
+            w2 = right+100
+            h1 = int(body_HL[0])+150
         else:
-            w1 = left-50
-            w2 = w1+600
+            print('other')
+            w1 = np.max(left-75, 0)
+            w2 = right+75
+            h1 = int(body_HL[0])+100
 
-        h1 = 560
-        h2 = 1280
-
+        h2 = h1+int(6/5*(w2-w1))
+        print(body_HL[0])
         print(w1, w2, h1, h2)
 
         self.ids.width.text = f'({w2-w1}, 0)'
@@ -379,7 +387,7 @@ class MyApp(Widget):
         # Affichage des marqueurs si bouton activé
         if detection_eff == True:
             for coordinates in dict_coordo[f'image{image_nb}']:
-                x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03 # calcul des coordonnées sur l'écran à partir de celles sur l'image
+                x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.025 # calcul des coordonnées sur l'écran à partir de celles sur l'image
                 y = 0.85 - (coordinates[1]/im_dim[0])*0.78
                 with self.canvas:
                     Color(0,1,0,1)
@@ -435,8 +443,8 @@ class MyApp(Widget):
         if self.ids.labelize_manual.state == 'normal':
             m_pos = [0,0]
             # im_dim = (600, 500, 3) = (height, width, channels)
-            if 0.03*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.03*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
-                m_pos[0] = (touch_pos[0]/self.width - 0.03)/(self.ids.image_show.width/self.width)*im_dim[1]
+            if 0.025*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.025*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
+                m_pos[0] = (touch_pos[0]/self.width - 0.025)/(self.ids.image_show.width/self.width)*im_dim[1]
                 m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
             # Détermine s'il y a un marqueur à effacer ou si on en ajoute un manquant
                 add_m = False
@@ -583,26 +591,6 @@ class MyApp(Widget):
         if self.ids.button_graph_continuity.state == 'normal':
             self.ids.graph.clear_widgets()
 
-    # Fonction de labelisation par régions, fonctionne peu importe le nombre de marqueurs (était utilisé pour le Participant 1 à l'hiver 2023)
-    """ def labelize(self):
-        global dict_coordo_labels1
-        dict_coordo_labels1 = {}
-        for im, coordo in dict_coordo.items():
-            dict_coordo_labels1.update({im:{'C7':(np.nan, np.nan), 'G':(np.nan, np.nan), 'D':(np.nan, np.nan), 'T':(np.nan, np.nan), 'L':(np.nan, np.nan)}})
-            for el in coordo:
-                x = el[0]
-                y = el[1]
-                if 120 < x < 260 and 100 < y < 270:
-                    dict_coordo_labels1[im]['G'] = (x,y)
-                elif 260 < x < 400 and 100 < y < 270:
-                    dict_coordo_labels1[im]['D'] = (x,y)
-                elif 200 < x < 320 and 10 < y < 100:
-                    dict_coordo_labels1[im]['C7'] = (x,y)
-                elif 200 < x < 320 and 270 < y < 350:
-                    dict_coordo_labels1[im]['T'] = (x,y)
-                elif 200 < x < 320 and 350 < y < 480:
-                    dict_coordo_labels1[im]['L'] = (x,y) """
-
     # Groupes de fonctions pour labellisation manuelle sur une image, puis étendue sur les autres par proximité
     # Détecte clic et associe marqueur à labelliser
     def labelize_manual(self, touch_pos):
@@ -613,8 +601,8 @@ class MyApp(Widget):
             m_pos = [0,0]
             # im_dim = (600, 500, 3) = (height, width, channels)
             # détecte si le clic est dans le cadre de l'image
-            if 0.03*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.03*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
-                m_pos[0] = (touch_pos[0]/self.width - 0.03)/(self.ids.image_show.width/self.width)*im_dim[1]
+            if 0.025*self.width <= touch_pos[0] <= (self.ids.image_show.width+0.025*self.width) and 0.07*self.height <= touch_pos[1] <= 0.85*self.height:
+                m_pos[0] = (touch_pos[0]/self.width - 0.025)/(self.ids.image_show.width/self.width)*im_dim[1]
                 m_pos[1] = -(touch_pos[1]/self.height - 0.85)/0.78*im_dim[0]
             # Trouve le marqueur le plus près pour lui associer le label
                 for c in dict_coordo[f'image{image_nb}']:
@@ -650,8 +638,6 @@ class MyApp(Widget):
                 self.ids.grid.add_widget(Label(text=f'({m_to_label[0]:.0f}, {m_to_label[1]:.0f})', color=(0,0,0,1)))
             if labelize_extent:
                 self.show_image()
-                
-            print(dict_coordo_labels_manual[f'image{image_nb}'])
             
             if len(list(dict_coordo_labels_manual[f'image{image_nb}'].keys())) == nb_marqueurs:
                 global labels
@@ -731,21 +717,8 @@ class MyApp(Widget):
                     row = [float(i) for i in row[1:]]
                     dict_coordo_xyz_labels[key].update({l:[row[1], row[0], row[2]]})
     
-    """ # Fonction de labelisation par tri (avec 5 marqueurs uniquement, selon coordonnées x,y,z)
+    """ # Fonction de labelisation par tri (avec 8 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
-    def labelize_5(self):
-        global dict_coordo_xyz_labels
-        dict_coordo_xyz_labels = {}
-        for im, coordos in dict_coordo_xyz.items():
-            coordos_sorted_x = sorted(coordos, key=lambda tup: tup[0])
-            dict_coordo_xyz_labels.update({im: {'G': coordos_sorted_x[0]}}) #plus petite valeur en x = gauche
-            dict_coordo_xyz_labels[im].update({'D': coordos_sorted_x[-1]}) #plus grande valeur en x = droite
-            del coordos_sorted_x[0]
-            del coordos_sorted_x[-1]
-            coordos_sorted_y = sorted(coordos_sorted_x, key=lambda tup: tup[1])
-            dict_coordo_xyz_labels[im].update({'C': coordos_sorted_y[-1]}) #plus grande valeur en y = C7
-            dict_coordo_xyz_labels[im].update({'T': coordos_sorted_y[-2]})
-            dict_coordo_xyz_labels[im].update({'L': coordos_sorted_y[0]})
     
     def labelize_8(self):
         global dict_coordo_xyz_labels
@@ -774,11 +747,8 @@ class MyApp(Widget):
             analyse_eff = True
             if self.ids.check_new.state == 'down' or 'coordonnees_xyz.csv' not in os.listdir(path+'/Positions/'):
                 self.coordo_xyz_marqueurs()
-                """ if nb_marqueurs in [5, 6]:
-                    self.labelize_5()
-                if nb_marqueurs in [8, 9]:
+                """ if nb_marqueurs in [8, 9]:
                     self.labelize_8() """
-            
             self.rotate_markers()
             if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
                 global dict_metriques
@@ -840,7 +810,7 @@ class MyApp(Widget):
     def analyse_5(self):
         dict_metriques = {'angle_rachis': [], 'var_rachis': []}
         # Calcul des métriques d'analyse et ajout au dictionnaire de métriques
-        for im, coordo in dict_coordo_xyz_labels.items():
+        for im, coordo in dict_coordo_xyz_labels_r.items():
 
             rachis_x = np.degrees(np.arctan((coordo['L'][0] - coordo['C'][0])/(coordo['L'][1] - coordo['C'][1])))
             dict_metriques['angle_rachis'].append(rachis_x)
@@ -860,7 +830,7 @@ class MyApp(Widget):
     # Calcule des métriques pour 8 marqueurs
     def analyse_8(self):
         dict_metriques = {'dejettement': [], 'scoliosis': []}
-        for im, coordo in dict_coordo_xyz_labels.items():
+        for im, coordo in dict_coordo_xyz_labels_r.items():
             dejet = (coordo['ID'][0]+coordo['IG'][0])/2 - coordo['C'][0]
             dict_metriques['dejettement'].append(dejet)
             
@@ -962,48 +932,35 @@ class MyApp(Widget):
         except NameError:
             gold_nb = max_sym_im
 
-        marker_array = np.zeros((images_total, nb_marqueurs, 3))
-
-        try:
-            with open(path+'/Positions/coordonnees_xyz.csv', 'r') as csvfile:
-                reader = csv.reader(csvfile, delimiter=';')
-                j = 0
-                for row in reader: #skip headline
-                    if j == 0:
-                        entete = row[1::3]
-                        labels = [e[:-2] for e in entete]
-                    elif j > 0:
-                        im = int(row[0])
-                        row = [float(i) for i in row[1:]]
-                        row_by_label = [[row[3*i], row[3*i+1], row[3*i+2]] for i in range(0,int(len(row)/3))]
-                        marker_array[im-1] = row_by_label
-                    j += 1
-
-        # enregistre métriques (positions xyz) si absentes afin de calculer les distances
-        except FileNotFoundError:
-            self.ids.button_distances.state = 'normal'
-            if analyse_eff:
-                if not 'Metriques' in os.listdir(path):
-                    os.mkdir(path+'/Metriques', )
-                if not 'Positions' in os.listdir(path):
-                    os.mkdir(path+'\\Positions', )
-                self.save_metriques()
-
         global distances
-        distances = np.zeros((images_total, nb_marqueurs, 3))
-        for i in range(len(marker_array[:,0,0])):
-            distances[i] = np.subtract(marker_array[gold_nb-1], marker_array[i])
-        
+        distances = {}
+        self.rotate_markers()
+
+        for im, coordos in dict_coordo_xyz_labels_r.items():
+            distances.update({im:{}})
+            for l, c in coordos.items():
+                dist_pelvis = ((dict_coordo_xyz_labels_r[f'image{gold_nb}']['IG'] - coordos['IG']) + (dict_coordo_xyz_labels_r[f'image{gold_nb}']['ID'] - coordos['ID'])) /2
+                distances[im].update({l: dict_coordo_xyz_labels_r[f'image{gold_nb}'][l] - c - dist_pelvis})
+
         return distances, labels
     
     # Afficher les marqueurs du gold frame
     def show_marqueurs_gold(self):
+        pelvis_x_gold = (dict_coordo_labels_manual[f'image{gold_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{gold_nb}']['ID'][0]) /2
+        pelvis_y_gold = (dict_coordo_labels_manual[f'image{gold_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{gold_nb}']['ID'][1]) /2
+        pelvis_x_act = (dict_coordo_labels_manual[f'image{image_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{image_nb}']['ID'][0]) /2
+        pelvis_y_act = (dict_coordo_labels_manual[f'image{image_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{image_nb}']['ID'][1]) /2
+        global gold_coordo
+        gold_coordo = []
         for coordinates in dict_coordo[f'image{gold_nb}']:
-            x = ((coordinates[0] - dict_coordo_labels_manual[f'image{gold_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{image_nb}']['IG'][0])/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
-            y = 0.85 - ((coordinates[1] - dict_coordo_labels_manual[f'image{gold_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{image_nb}']['IG'][1] )/im_dim[0])*0.78
+            x = coordinates[0] - pelvis_x_gold + pelvis_x_act
+            y = coordinates[1] - pelvis_y_gold + pelvis_y_act
+            gold_coordo.append([x, y])
+            pos_x = self.width*(x/im_dim[1]*(self.ids.image_show.width/self.width) + 0.025)
+            pos_y = self.height*(0.85 - y/im_dim[0]*0.78)
             with self.canvas:
                 Color(245/255,168/255,2/255,1)
-                Line(circle=(self.width*x, self.height*y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
+                Line(circle=(pos_x, pos_y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
 
     # Affiche ou efface les distances selon l'état du bouton
     def toggle_distances(self):
@@ -1016,21 +973,21 @@ class MyApp(Widget):
     def show_distances(self):
         
         distances, labels = self.distance_to_gold()
+        print(distances)
         self.show_marqueurs_gold()
 
         self.ids.xyz_axis.size_hint = (.05, .09)
         self.ids.xyz_axis.source = 'xyz_axis.png'
         dist_act = {}
-        for i, l in enumerate(labels):
-            dist_act.update({l: distances[image_nb-1][i]})
+        for l in labels:
+            dist_act.update({l: distances[f'image{image_nb}'][l]})
 
         self.Distances = Widget()
-        print(dict_coordo_labels_manual)
         for l in labels:
             coordinates = dict_coordo_labels_manual[f'image{gold_nb}'][l]
-            x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.03
+            x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.025
             y = 0.85 - (coordinates[1]/im_dim[0])*0.78
-            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]-dist_act["IG"][0]:.0f}\nY : {dist_act[l][1]-dist_act["IG"][1]:.0f}\nZ : {dist_act[l][2]-dist_act["IG"][2]:.0f}',
+            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]:.0f}\nY : {dist_act[l][1]:.0f}\nZ : {dist_act[l][2]:.0f}',
                                 fontsize='10sp', color=(1,1,1,1), size_hint=(.2, .2), pos=(self.width*x, self.height*y))
             self.Distances.add_widget(self.dist_txt)
 
@@ -1047,8 +1004,9 @@ class MyApp(Widget):
         ID = dict_coordo_xyz_labels['image1']['ID']
         IG = dict_coordo_xyz_labels['image1']['IG']
         print(f'ID : {ID}, IG : {IG}')
-        rz = math.atan((ID[1] - IG[1])/(ID[0] - IG[0]))
-        rx = math.atan((ID[2] - IG[2])/(ID[0] - IG[0]))
+        pelvis = ((IG[0]+ID[0])/2, (IG[1]+ID[1])/2, (IG[2]+ID[2])/2)
+        rz = (math.atan((ID[1] - pelvis[1])/(ID[0] - pelvis[0])) + math.atan((pelvis[1] - IG[1])/(pelvis[0] - IG[0]))) /2
+        rx = (math.atan((ID[2] - pelvis[2])/(ID[0] - pelvis[0])) + math.atan((pelvis[2] - IG[2])/(pelvis[0] - IG[0]))) /2
 
         for i in range(images_total):
             markers_r = o3d.geometry.PointCloud()
@@ -1057,7 +1015,7 @@ class MyApp(Widget):
 
             global matrix_R
             matrix_R = markers_r.get_rotation_matrix_from_xyz((0, rx, -rz))
-            markers_r.rotate(matrix_R, center=(IG[0], IG[1], IG[2]))
+            markers_r.rotate(matrix_R, center=pelvis)
             dict_coordo_xyz_rotated.update({f'image{i+1}': np.asarray(markers_r.points)})
         
         global dict_coordo_xyz_labels_r
@@ -1078,27 +1036,6 @@ class MyApp(Widget):
         global markers_rotated
         markers_rotated = True
 
-    def rotate_xyz(self, file):
-        """ with open(file, 'r') as f:
-            f.seek(RRF.header_size)
-            xyz = np.fromfile(f, np.float32).reshape((RRF.h*RRF.w, 3))
-
-        xyz_r = np.matmul(xyz, matrix_R)
-        xyz_r = xyz_r.reshape(RRF.h, RRF.w, 3) """
-
-        xyz = np.load(file)
-
-        """ xyz_r = copy.deepcopy(xyz)
-
-        for i in range(len(xyz[:,0,0])):
-            for j in range(len(xyz[0,:,0])):
-                xyz_ar = np.array([xyz[i,j]])
-                xyz_r[i,j] = np.matmul(xyz_ar, matrix_R) """
-
-        xyz_r = linalg.matmul(xyz, matrix_R)
-
-        return np.asarray(xyz_r)
-
     def equalize_histogram(self, img, max, w):
         # Calcul de la transformation
         counts, bins = np.histogram(img, bins=max+1, range=(0,max-1))
@@ -1118,9 +1055,23 @@ class MyApp(Widget):
 
     def show_profondeur(self):
         if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
-            for file in os.listdir(save_path_xyz):
+            """ ID = dict_coordo_xyz_labels['image1']['ID']
+            IG = dict_coordo_xyz_labels['image1']['IG']
+            print(f'ID : {ID}, IG : {IG}')
+            pelvis = ((IG[0]+ID[0])/2, (IG[1]+ID[1])/2, (IG[2]+ID[2])/2)
+            rz = (math.atan((ID[1] - pelvis[1])/(ID[0] - pelvis[0])) + math.atan((pelvis[1] - IG[1])/(pelvis[0] - IG[0]))) /2
+            rx = (math.atan((ID[2] - pelvis[2])/(ID[0] - pelvis[0])) + math.atan((pelvis[2] - IG[2])/(pelvis[0] - IG[0]))) /2
 
-                xyz_r = self.rotate_xyz(os.path.join(save_path_xyz, file))
+            xyz_pc = o3d.geometry.PointCloud()
+            xyz_pc_points = np.load(os.path.join(save_path_xyz, os.listdir(save_path_xyz)[0]))
+            xyz_pc.points = o3d.utility.Vector3dVector(xyz_pc_points)
+
+            matrix_R = xyz_pc.get_rotation_matrix_from_xyz((0, rx, -rz)) """
+
+            for file in os.listdir(save_path_xyz):
+                xyz = np.load(os.path.join(save_path_xyz, file))
+                xyz_r = linalg.matmul(xyz, matrix_R)
+                xyz_r = np.asarray(xyz_r)
                 
                 z = xyz_r[:,:,2][h1:h2, w1:w2]
                 z = z.astype(int)
@@ -1128,7 +1079,7 @@ class MyApp(Widget):
                 z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
                 
                 weights = np.ones((z.shape))
-                weights[z > np.max(z)-70] = 0
+                weights[z > np.max(z)-100] = 0
                 weights = weights.astype(bool)
 
                 z_eq = self.equalize_histogram(z, np.max(z), weights)
