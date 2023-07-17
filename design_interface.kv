@@ -115,6 +115,7 @@
             ToggleButton:
                 id: button_verif_nb
                 text: "Vérifier le nombre\nde marqueurs"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.verif_nb()
             Button:
@@ -125,40 +126,46 @@
                 valign: 'middle'
                 halign: 'center'
                 text: "Supprimer les\nmauvaises détections"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.delete_by_continuity()
             ToggleButton:
                 id: button_interpolate
                 text: "Ajouter des marqueurs\npar interpolation"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.add_by_continuity()
             ToggleButton:
                 id: button_verif_continuity
                 text: "Vérifier la continuité\ndes marqueurs"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.verif_continuity()
             ToggleButton:
                 id: button_graph_continuity
                 text: "Afficher les graphiques\nde continuité"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.graph_continuity()
             ToggleButton:
                 id: button_analyze
                 text: "Confirmer et\nlancer l'analyse"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.analyse()
             ToggleButton:
                 id: button_distances
                 text: "Afficher les distances\nentre marqueurs"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.toggle_distances()
             ToggleButton:
                 id: button_profondeur
                 text: "Afficher les cartes\nde profondeur"
+                disabled: True
                 on_press: root.press_color()
                 on_press: root.rotate_markers()
                 on_press: root.show_profondeur()
-                #on_press: root.show_profondeur()
                 
         Image: #système d'axes
             id: xyz_axis

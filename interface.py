@@ -79,7 +79,6 @@ class MyApp(Widget):
         try: # si chemin entré valide
             # Crée les répertoires pour images converties et prétraitées
             os.makedirs(save_path, exist_ok=True)
-            os.makedirs(path+'/landmarks/', exist_ok=True)
             os.makedirs(save_path_xyz, exist_ok=True)
             os.makedirs(save_path_im, exist_ok=True)
             os.makedirs(save_path_depth, exist_ok = True)
@@ -133,11 +132,10 @@ class MyApp(Widget):
         zz = z[np.where(z>0)]
         zz = zz[np.where(zz<2500)]
         z_nobg = copy.deepcopy(z)
+        body_z = np.quantile(zz, 0.3)
         if 'Contraint' in os.listdir(save_path_xyz)[0]:
-            body_z = np.quantile(zz, 0.3)
             z_nobg[np.where(z > body_z + 150)] = False
         else:
-            body_z = np.median(zz)
             z_nobg[np.where(z > body_z + 300)] = False
         z_nobg = median_filter(z_nobg, 3)
 
@@ -349,6 +347,9 @@ class MyApp(Widget):
                 self.ids.button_showmarks.state = 'down'
                 self.ids.button_verif_nb.state = 'down'
 
+                self.ids.button_graph_continuity.disabled = False
+                self.ids.button_graph_continuity.disabled = False
+
                 global labelize_extent
                 labelize_extent = True
 
@@ -375,6 +376,8 @@ class MyApp(Widget):
                             j += 1
                 else:
                     self.coordo_xyz_marqueurs()
+                
+                self.ids.button_analyze.disabled = False
 
                 self.analyse()
 
@@ -403,40 +406,39 @@ class MyApp(Widget):
     # (avec dictionnaire de coordonnées créé)
     # Retourne la liste des images n'ayant pas 5 marqueurs détectés et les liste dans une nouvelle fenêtre
     def verif_nb(self):
-        if detection_eff == True:
-            im_prob_nb = [] #liste des images avec ±5 marqueurs
-            for im, coordo in dict_coordo.items():
-                if len(coordo) != nb_marqueurs:
-                    im_prob_nb.append(int(im[5:])) #ajoute l'image et le nombre de marqueurs détectés à la liste
-            for im, dict in dict_coordo_labels_manual.items():
-                    coordo = list(dict.values())
-                    if [np.nan, np.nan] in coordo and int(im[5:])not in im_prob_nb:
-                        im_prob_nb.append(int(im[5:]))
-            
-            im_prob_nb = sorted(im_prob_nb)
+        im_prob_nb = [] #liste des images avec ±5 marqueurs
+        for im, coordo in dict_coordo.items():
+            if len(coordo) != nb_marqueurs:
+                im_prob_nb.append(int(im[5:])) #ajoute l'image et le nombre de marqueurs détectés à la liste
+        for im, dict in dict_coordo_labels_manual.items():
+                coordo = list(dict.values())
+                if [np.nan, np.nan] in coordo and int(im[5:])not in im_prob_nb:
+                    im_prob_nb.append(int(im[5:]))
+        
+        im_prob_nb = sorted(im_prob_nb)
 
-            if len(im_prob_nb) > 0:
-                txt = f"Numéros des images n'ayant pas {nb_marqueurs} marqueurs :\n"
-                txt_multiline = ''
-                i = len(txt)
-                count = 0
-                # formattage du texte à afficher (lignes multiples)
-                for im in im_prob_nb:
-                    txt += f'{im}, '
-                for n in range(len(txt)):
-                    if txt[n]==',':
-                        count+=1
-                        if count == 20:
-                            txt_multiline = txt[:n+1] + '\n' + txt[n+2:]
-                        if count > 20 and count%20 == 0:
-                            txt_multiline = txt_multiline[:n+1] + '\n' + txt_multiline[n+2:]
-                if len(txt_multiline) > 1:
-                    self.ids.im_prob_nb.text = txt_multiline[:-2]
-                else:
-                    self.ids.im_prob_nb.text = txt[:-2]
-            elif len(im_prob_nb) == 0:
-                self.ids.im_prob_nb.text = f'{nb_marqueurs} marqueurs détectés sur toutes les images !'
-            return im_prob_nb
+        if len(im_prob_nb) > 0:
+            txt = f"Numéros des images n'ayant pas {nb_marqueurs} marqueurs :\n"
+            txt_multiline = ''
+            i = len(txt)
+            count = 0
+            # formattage du texte à afficher (lignes multiples)
+            for im in im_prob_nb:
+                txt += f'{im}, '
+            for n in range(len(txt)):
+                if txt[n]==',':
+                    count+=1
+                    if count == 20:
+                        txt_multiline = txt[:n+1] + '\n' + txt[n+2:]
+                    if count > 20 and count%20 == 0:
+                        txt_multiline = txt_multiline[:n+1] + '\n' + txt_multiline[n+2:]
+            if len(txt_multiline) > 1:
+                self.ids.im_prob_nb.text = txt_multiline[:-2]
+            else:
+                self.ids.im_prob_nb.text = txt[:-2]
+        elif len(im_prob_nb) == 0:
+            self.ids.im_prob_nb.text = f'{nb_marqueurs} marqueurs détectés sur toutes les images !'
+        return im_prob_nb
    
     # Fonction pour convertir la position touchée en coordonnées de marqueur, puis choisir l'action à exécuter (delete or add)
     def pos_marqueur(self, touch_pos):
@@ -511,22 +513,21 @@ class MyApp(Widget):
     # Fonction pour détecter les discontinuités (changement important de pente) ...de moins en moins utile avec l'interpolation
     def verif_continuity(self):
         im_prob_continuity = {}
-        if detection_eff:
-            for im in range(2, images_total):
-                coordo_prec = dict_coordo_labels_manual[f'image{im-1}']
-                coordo_act = dict_coordo_labels_manual[f'image{im}']
-                coordo_next = dict_coordo_labels_manual[f'image{im+1}']
-                for label in labels:
-                    if abs((coordo_next[label][0]-coordo_act[label][0])-(coordo_act[label][0]-coordo_prec[label][0])) > 10:
-                        if im not in im_prob_continuity:
-                            im_prob_continuity.update({im: [label]})
-                        else:
-                            im_prob_continuity[im].append(label)
-                    if abs((coordo_next[label][1]-coordo_act[label][1])-(coordo_act[label][1]-coordo_prec[label][1])) > 10:
-                        if im not in im_prob_continuity:
-                            im_prob_continuity.update({im: [label]})
-                        elif label not in im_prob_continuity[im]:
-                            im_prob_continuity[im].append(label)
+        for im in range(2, images_total):
+            coordo_prec = dict_coordo_labels_manual[f'image{im-1}']
+            coordo_act = dict_coordo_labels_manual[f'image{im}']
+            coordo_next = dict_coordo_labels_manual[f'image{im+1}']
+            for label in labels:
+                if abs((coordo_next[label][0]-coordo_act[label][0])-(coordo_act[label][0]-coordo_prec[label][0])) > 10:
+                    if im not in im_prob_continuity:
+                        im_prob_continuity.update({im: [label]})
+                    else:
+                        im_prob_continuity[im].append(label)
+                if abs((coordo_next[label][1]-coordo_act[label][1])-(coordo_act[label][1]-coordo_prec[label][1])) > 10:
+                    if im not in im_prob_continuity:
+                        im_prob_continuity.update({im: [label]})
+                    elif label not in im_prob_continuity[im]:
+                        im_prob_continuity[im].append(label)
 
         return im_prob_continuity
     
@@ -549,8 +550,6 @@ class MyApp(Widget):
 
         for l in labels:
             m = len(x[l])
-            sm = m-math.sqrt(2*m)
-            #w = np.ones(m) #poids de 1 à tous les points
             if m > 7:
                 y[l][0] = gaussian_filter1d(y[l][0], 3) #filtre les données avant interpolation
                 y[l][1] = gaussian_filter1d(y[l][1], 3)
@@ -564,29 +563,28 @@ class MyApp(Widget):
 
     # Graphiques des positions des marqueurs selon l'image, avec splines d'interpolation
     def graph_continuity(self):
-        if detection_eff == True:
-            xaxis = range(1, images_total+1)
-            splines_smooth = self.interpolate_spline()
-            fig, (ax1, ax2) = plt.subplots(2,1)
-            colors = ['tab:orange', 'tab:red', 'tab:green', 'k', 'tab:blue', 'tab:purple', 'y', 'c', 'tab:gray', 'tab:pink']
-            for m, color in zip(labels, colors[0:nb_marqueurs]):
-                try:
-                    plot_x = [c[m][0] for c in dict_coordo_labels_manual.values()]
-                    plot_y = [c[m][1] for c in dict_coordo_labels_manual.values()]
-                except KeyError:
-                    continue
-                ax1.scatter(xaxis, plot_x, s=2, label=m, c=color)
-                ax1.plot(xaxis, splines_smooth[m][0], c=color)
-                ax2.scatter(xaxis, plot_y, s=2, label=m, c=color)
-                ax2.plot(xaxis, splines_smooth[m][1], c=color)
-            ax1.legend(loc='center right', bbox_to_anchor=(1.13, -0.2), fontsize=9, frameon=False)
-            ax1.set_title("Coordonnées des marqueurs selon l'image", fontsize=10)
-            ax1.set_ylabel("Coordonnée en x", fontsize=9)
-            ax2.set_ylabel("Coordonnée en y", fontsize=9)
-            ax2.set_xlabel("Numéro de l'image", fontsize=9)
-            #plt.savefig(r'C:\Users\LEA\Desktop\Poly\H2023\Projet 3\graph_continuity_1.png')
-            self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
-            plt.close()
+        xaxis = range(1, images_total+1)
+        splines_smooth = self.interpolate_spline()
+        fig, (ax1, ax2) = plt.subplots(2,1)
+        colors = ['tab:orange', 'tab:red', 'tab:green', 'k', 'tab:blue', 'tab:purple', 'y', 'c', 'tab:gray', 'tab:pink']
+        for m, color in zip(labels, colors[0:nb_marqueurs]):
+            try:
+                plot_x = [c[m][0] for c in dict_coordo_labels_manual.values()]
+                plot_y = [c[m][1] for c in dict_coordo_labels_manual.values()]
+            except KeyError:
+                continue
+            ax1.scatter(xaxis, plot_x, s=2, label=m, c=color)
+            ax1.plot(xaxis, splines_smooth[m][0], c=color)
+            ax2.scatter(xaxis, plot_y, s=2, label=m, c=color)
+            ax2.plot(xaxis, splines_smooth[m][1], c=color)
+        ax1.legend(loc='center right', bbox_to_anchor=(1.13, -0.2), fontsize=9, frameon=False)
+        ax1.set_title("Coordonnées des marqueurs selon l'image", fontsize=10)
+        ax1.set_ylabel("Coordonnée en x", fontsize=9)
+        ax2.set_ylabel("Coordonnée en y", fontsize=9)
+        ax2.set_xlabel("Numéro de l'image", fontsize=9)
+        #plt.savefig(r'C:\Users\LEA\Desktop\Poly\H2023\Projet 3\graph_continuity_1.png')
+        self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+        plt.close()
 
         if self.ids.button_graph_continuity.state == 'normal':
             self.ids.graph.clear_widgets()
@@ -690,7 +688,13 @@ class MyApp(Widget):
                                 break
                         else:
                             dict_coordo_labels_manual[im][label] = [np.nan, np.nan]
-                        
+        
+        self.ids.button_verif_nb.disabled = False
+        self.ids.button_verif_continuity.disabled = False
+        self.ids.button_graph_continuity.disabled = False
+        self.ids.button_delete.disabled = False
+        self.ids.button_interpolate.disabled = False
+        self.ids.button_analyze.disabled = False               
                         
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
     def coordo_xyz_marqueurs(self):
@@ -800,6 +804,9 @@ class MyApp(Widget):
             self.ids.graph.clear_widgets()
 
         self.show_image()
+
+        self.ids.button_distances.disabled = False
+        self.ids.button_profondeur.disabled = False
 
         timer_fin_analyse = time.process_time_ns()
         print(timer_debut_analyse, timer_fin_analyse)
@@ -1028,9 +1035,9 @@ class MyApp(Widget):
                     dist.append(np.sqrt((c[0]-cr[0])**2+(c[1]-cr[1])**2+(c[2]-cr[2])**2))
                 ind = dist.index(min(dist))
                 if f'image{i+1}' not in dict_coordo_xyz_labels_r:
-                    dict_coordo_xyz_labels_r.update({f'image{i+1}': {l : coordo_r[ind]}})
+                    dict_coordo_xyz_labels_r.update({f'image{i+1}': {l : list(coordo_r[ind])}})
                 else:
-                    dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : coordo_r[ind]})
+                    dict_coordo_xyz_labels_r[f'image{i+1}'].update({l : list(coordo_r[ind])})
 
         print(dict_coordo_xyz_labels_r)
         global markers_rotated
@@ -1079,7 +1086,7 @@ class MyApp(Widget):
                 z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
                 
                 weights = np.ones((z.shape))
-                weights[z > np.max(z)-100] = 0
+                weights[z > np.median(z)+300] = 0
                 weights = weights.astype(bool)
 
                 z_eq = self.equalize_histogram(z, np.max(z), weights)
@@ -1115,7 +1122,7 @@ class MyApp(Widget):
                 if not 'Metriques' in os.listdir(path):
                     os.mkdir(path+'/Metriques', )
                 if not 'Positions' in os.listdir(path):
-                    os.mkdir(path+'\\Positions', )
+                    os.mkdir(path+'/Positions', )
                 self.save_metriques()
             if self.ids.save_graph.state == 'down':
                 if not 'Metriques' in os.listdir(path):
@@ -1129,9 +1136,9 @@ class MyApp(Widget):
     
     # Crée un csv et y écrit les coordonnées x,y,z des 5 marqueurs selon le numéro de l'image
     def save_positions(self):
-        save_pos = path+'\\Positions'
+        save_pos = path+'/Positions'
         print('writing to ' + save_pos+'/positions_corrigees.json')
-        with open(save_pos+'\\positions_corrigees.json', 'w') as positions:
+        with open(save_pos+'/positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels_manual, positions)
     
     # Crée un csv et y écrit les métriques et le score global pour chaque image
@@ -1148,6 +1155,9 @@ class MyApp(Widget):
                 for l in dict_coordo_xyz_labels['image1'].keys():
                     row += [coordos[l][0], coordos[l][1], coordos[l][2]]
                 writer.writerow(row)
+        
+        with open(save_pos+'/positions_xyzr.json', 'w') as positions:
+            json.dump(dict_coordo_xyz_labels_r, positions)
 
         save_met = path+'/Metriques/metriques.csv'
         with open(save_met, 'w', newline='') as csvfile:
@@ -1163,7 +1173,7 @@ class MyApp(Widget):
     # Enregistre le graphique des métriques sous format png
     def save_graph_analyze(self):
         self.graph_analyze()
-        plt.savefig(path+'\\Metriques\\graph_analyze.png')
+        plt.savefig(path+'/Metriques/graph_analyze.png')
         plt.close()
 
         
