@@ -876,15 +876,15 @@ class MyApp(Widget):
         fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2)
 
         ax1.plot(xaxis, dict_metriques['angle_scap_vert'], label='Hauteur')
-        ax1.scatter(min_metriques['angle_scap_vert'][0], min_metriques['angle_scap_vert'][1], marker='*', c='r')
+        ax1.scatter(min_metriques['angle_scap_vert'][0]+1, min_metriques['angle_scap_vert'][1], marker='*', c='r')
         ax1.plot(xaxis, dict_metriques['angle_scap_prof'], label='Profondeur')
-        ax1.scatter(min_metriques['angle_scap_prof'][0], min_metriques['angle_scap_prof'][1], marker='*', c='g')
+        ax1.scatter(min_metriques['angle_scap_prof'][0]+1, min_metriques['angle_scap_prof'][1], marker='*', c='g')
         ax1.legend(fontsize=7)
         ax1.set_title("Angles entre les scapulas", fontsize=9)
         ax1.set_ylabel('Angle (degrés)', fontsize=9)
 
         ax2.plot(xaxis, dict_metriques['diff_dg'])
-        ax2.scatter(min_metriques['diff_dg'][0], min_metriques['diff_dg'][1], marker='*', c='r')
+        ax2.scatter(min_metriques['diff_dg'][0]+1, min_metriques['diff_dg'][1], marker='*', c='r')
         ax2.set_title("|Distance rachis-G - Distance rachis-D|", fontsize=9)
         ax2.set_ylabel('Distance (mm)', fontsize=9)
 
@@ -905,11 +905,11 @@ class MyApp(Widget):
             ax4.set_ylabel('180 - Angle (degrés)', fontsize=9)
 
         ax3.plot(xaxis, dict_metriques[metrique_3])
-        ax3.scatter(min_metriques[metrique_3][0], min_metriques[metrique_3][1], marker='*', c='r')
+        ax3.scatter(min_metriques[metrique_3][0]+1, min_metriques[metrique_3][1], marker='*', c='r')
         ax3.set_xlabel("Numéro de l'image", fontsize=9)
         
         ax4.plot(xaxis, dict_metriques[metrique_4])
-        ax4.scatter(min_metriques[metrique_4][0], min_metriques[metrique_4][1], marker='*', c='r')
+        ax4.scatter(min_metriques[metrique_4][0]+1, min_metriques[metrique_4][1], marker='*', c='r')
         ax4.set_xlabel("Numéro de l'image", fontsize=9)
         
         plt.tight_layout()
@@ -946,8 +946,8 @@ class MyApp(Widget):
         for im, coordos in dict_coordo_xyz_labels_r.items():
             distances.update({im:{}})
             for l, c in coordos.items():
-                dist_pelvis = ((dict_coordo_xyz_labels_r[f'image{gold_nb}']['IG'] - coordos['IG']) + (dict_coordo_xyz_labels_r[f'image{gold_nb}']['ID'] - coordos['ID'])) /2
-                distances[im].update({l: dict_coordo_xyz_labels_r[f'image{gold_nb}'][l] - c - dist_pelvis})
+                dist_pelvis = ((np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['IG']) - np.asarray(coordos['IG'])) + (np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['ID']) - np.asarray(coordos['ID']))) /2
+                distances[im].update({l: np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}'][l]) - np.asarray(c) - dist_pelvis})
 
         return distances, labels
     
