@@ -170,12 +170,11 @@ class MyApp(Widget):
             h1 = int(body_HL[0])+150
         else:
             print('other')
-            w1 = np.max(left-75, 0)
-            w2 = right+75
+            w1 = np.max(left-80, 0)
+            w2 = right+80
             h1 = int(body_HL[0])+100
 
         h2 = h1+int(6/5*(w2-w1))
-        print(body_HL[0])
         print(w1, w2, h1, h2)
 
         self.ids.width.text = f'({w2-w1}, 0)'
@@ -550,14 +549,17 @@ class MyApp(Widget):
 
         for l in labels:
             m = len(x[l])
-            if m > 7:
+            if m > images_total/7:
                 y[l][0] = gaussian_filter1d(y[l][0], 3) #filtre les données avant interpolation
                 y[l][1] = gaussian_filter1d(y[l][1], 3)
 
                 spl[l][0] = splrep(x[l], y[l][0], k=3)
                 spl[l][1] = splrep(x[l], y[l][1], k=3)
                 splines_smooth[l][0] = splev(x_axis, spl[l][0], ext=3)
-                splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)   
+                splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)
+            else:
+                splines_smooth[l][0] = np.full((images_total, ), np.nan)
+                splines_smooth[l][0] = np.full((images_total, ), np.nan)
 
         return splines_smooth
 
@@ -617,11 +619,10 @@ class MyApp(Widget):
             pass
     
     # Entre le label du marqueur sélectionne dans le tableau et dans le dictionnaire, extend labelisation si tous les marqueurs labellisés
-    def label_in(self, butt_instance):
-        for butt_id, button in self.ids.items():
-            if button == butt_instance:
-                id = butt_id
+    def label_in(self, button):
+        id = button.custom_value
         label = id[5:]
+
         self.canvas.remove_group(u"label")
 
         if m_to_label != [np.nan, np.nan]:
@@ -773,26 +774,29 @@ class MyApp(Widget):
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
 
                 for im, coordo in dict_coordo_xyz_labels_r.items():
-                    scap_y = np.degrees(np.arctan((coordo['D'][1] - coordo['G'][1])/(coordo['D'][0] - coordo['G'][0])))
+                    scap_y = np.degrees(np.arctan((coordo['ScD'][1] - coordo['ScG'][1])/(coordo['ScD'][0] - coordo['ScG'][0])))
                     dict_metriques['angle_scap_vert'].append(scap_y)
-                    scap_z = np.degrees(np.arctan((coordo['G'][2] - coordo['D'][2])/(coordo['D'][0] - coordo['G'][0]))) #ajouter avec z
+                    scap_z = np.degrees(np.arctan((coordo['ScG'][2] - coordo['ScD'][2])/(coordo['ScD'][0] - coordo['ScG'][0]))) #ajouter avec z
                     dict_metriques['angle_scap_prof'].append(scap_z)
 
                     # calcul distance horizontale entre marqueurs D/G et l'axe du rachis (x=ay+b)
-                    a = (coordo['L'][0]-coordo['C'][0])/(coordo['L'][1]-coordo['C'][1])
-                    b = coordo['C'][0] - a*coordo['C'][1]
-                    x1 = coordo['G'][0]
-                    x2 = (a*coordo['G'][1])+b
+                    if 'Linf' in coordo.keys():
+                        a = (coordo['Linf'][0]-coordo['C7'][0])/(coordo['Linf'][1]-coordo['C7'][1])
+                    elif 'Tinf' in coordo.keys():
+                        a = (coordo['Tinf'][0]-coordo['C7'][0])/(coordo['Tinf'][1]-coordo['C7'][1])
+                    b = coordo['C7'][0] - a*coordo['C7'][1]
+                    x1 = coordo['ScG'][0]
+                    x2 = (a*coordo['ScG'][1])+b
                     d1 = abs(x1 - x2) #distance entre G et l'axe de la colonne
-                    x3 = coordo['D'][0]
-                    x4 = a*coordo['D'][1]+b
+                    x3 = coordo['ScD'][0]
+                    x4 = a*coordo['ScD'][1]+b
                     d2 = abs(x3 - x4) #distance entre D et l'axe de la colonne
                     diff_d1d2 = abs(d1 - d2)
                     dict_metriques['diff_dg'].append(diff_d1d2)
 
                 if nb_marqueurs in [5,6]:
                     dict_metriques.update(self.analyse_5())
-                if nb_marqueurs in [8,9]:
+                if nb_marqueurs in [8,9,10]:
                     dict_metriques.update(self.analyse_8())
 
                 # Recherche des metriques optimales (et images associées)
@@ -832,11 +836,10 @@ class MyApp(Widget):
         dict_metriques = {'angle_rachis': [], 'var_rachis': []}
         # Calcul des métriques d'analyse et ajout au dictionnaire de métriques
         for im, coordo in dict_coordo_xyz_labels_r.items():
-
-            rachis_x = np.degrees(np.arctan((coordo['L'][0] - coordo['C'][0])/(coordo['L'][1] - coordo['C'][1])))
+            rachis_x = np.degrees(np.arctan((coordo['Tinf'][0] - coordo['C7'][0])/(coordo['Tinf'][1] - coordo['C7'][1])))
             dict_metriques['angle_rachis'].append(rachis_x)
             try:
-                rachis_h = [coordo['L'][0], coordo['T'][0], coordo['C'][0]] #positions horizontales
+                rachis_h = [coordo['Tinf'][0], coordo['Tap'][0], coordo['Tsup'][0]] #positions horizontales
             except KeyError:
                 try:
                     rachis_h = [coordo['L'][0], coordo['T1'][0], coordo['T2'][0], coordo['C'][0]]
@@ -852,12 +855,12 @@ class MyApp(Widget):
     def analyse_8(self):
         dict_metriques = {'dejettement': [], 'scoliosis': []}
         for im, coordo in dict_coordo_xyz_labels_r.items():
-            dejet = (coordo['ID'][0]+coordo['IG'][0])/2 - coordo['C'][0]
+            dejet = (coordo['ID'][0]+coordo['IG'][0])/2 - coordo['C7'][0]
             dict_metriques['dejettement'].append(dejet)
             
-            a = np.sqrt((coordo['T1'][0]-coordo['T2'][0])**2+(coordo['T1'][1]-coordo['T2'][1])**2)
-            b = np.sqrt((coordo['T2'][0]-coordo['L'][0])**2+(coordo['T2'][1]-coordo['L'][1])**2)
-            c = np.sqrt((coordo['T1'][0]-coordo['L'][0])**2+(coordo['T1'][1]-coordo['L'][1])**2)
+            a = np.sqrt((coordo['Tsup'][0]-coordo['Tap'][0])**2+(coordo['Tsup'][1]-coordo['Tap'][1])**2)
+            b = np.sqrt((coordo['Tap'][0]-coordo['Tinf'][0])**2+(coordo['Tap'][1]-coordo['Tinf'][1])**2)
+            c = np.sqrt((coordo['Tsup'][0]-coordo['Tinf'][0])**2+(coordo['Tsup'][1]-coordo['Tinf'][1])**2)
             scoliosis_angle = 180 - np.degrees(np.arccos((a**2+b**2-c**2)/(2*a*b)))
             dict_metriques['scoliosis'].append(scoliosis_angle)
         
@@ -910,7 +913,7 @@ class MyApp(Widget):
             ax4.set_title('Écart-type (C, T, L) / Moyenne en x', fontsize=9)
             ax4.set_ylabel('Variabilité', fontsize=9)
         
-        elif nb_marqueurs in[8,9]:
+        elif nb_marqueurs in[8,9,10]:
             metrique_3 = 'dejettement'
             metrique_4 = 'scoliosis'
             ax3.set_title('Déjettement (> 0 = gauche | < 0 = droit)', fontsize=9)
