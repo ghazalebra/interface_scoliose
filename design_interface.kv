@@ -51,7 +51,7 @@
             text: ''
             font_size: 15
             size_hint: (.02, .045)
-            pos_hint:{'x':.48, 'top':.98}
+            pos_hint:{'x':.49, 'top':.98}
             multiline: False
             on_text_validate: root.nb_marqueurs_input()
         Label:
@@ -73,21 +73,19 @@
             pos_hint: {'x':.03, 'top':.85}
             size_hint: (.033, .02)
             text: '(0, 0)'
-            font_size: 14
+            font_size: 12
             color: 1,1,1,1
         Label:
             id:width
             pos_hint: {'x':.3262, 'top':.85}
             size_hint: (.033, .02)
-            text: '(500, 0)'
-            font_size: 14
+            font_size: 12
             color: 1,1,1,1
         Label:
             id:height
             pos_hint: {'x':.03, 'top':.095}
             size_hint: (.035, .02)
-            text: '(0, 600)'
-            font_size: 14
+            font_size: 12
             color: 1,1,1,1
         Slider:
             id: slider
@@ -166,7 +164,53 @@
                 on_press: root.press_color()
                 on_press: root.rotate_markers()
                 on_press: root.show_profondeur()
-                
+        GridLayout:
+            pos_hint:{'x':.38, 'top':.29}
+            size_hint:{.14, .1}
+            cols: 5
+            rows: 2
+            spacing: 2
+            orientation:'lr-tb'
+            ToggleButton:
+                id: marq_C7
+                text: 'C7'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_Tsup
+                text: 'Tsup'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_Tap
+                text: 'Tap'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_Tinf
+                text: 'Tinf'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_Lap
+                text: 'Lap'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_Linf
+                text: 'Linf'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_ScG
+                text: 'ScG'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_ScD
+                text: 'ScD'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_IG
+                text: 'IG'
+                on_press: root.label_in(self)
+            ToggleButton:
+                id: marq_ID
+                text: 'ID'
+                on_press: root.label_in(self)
         Image: #système d'axes
             id: xyz_axis
             size_hint: (0, 0)
@@ -174,19 +218,19 @@
             pos_hint: {'x':.03, 'top':.85}
             allow_stretch: False
             keep_ratio: True
-        Label:
-            text: 'Label :'
-            font_size: 15
-            size_hint: (.07, .05)
-            pos_hint:{'x':.39, 'top':.28}
-        TextInput:
-            id: label_input
-            text: ''
-            font_size: 15
-            size_hint: (.04, .04)
-            pos_hint:{'x':.46, 'top':.28}
-            multiline: False
-            on_text_validate: root.label_in()
+        # Label:
+        #     text: 'Label :'
+        #     font_size: 15
+        #     size_hint: (.07, .05)
+        #     pos_hint:{'x':.39, 'top':.28}
+        # TextInput:
+        #     id: label_input
+        #     text: ''
+        #     font_size: 15
+        #     size_hint: (.04, .04)
+        #     pos_hint:{'x':.46, 'top':.28}
+        #     multiline: False
+        #     on_text_validate: root.label_in()
         GridLayout:
             id:grid
             cols:2

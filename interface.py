@@ -617,8 +617,11 @@ class MyApp(Widget):
             pass
     
     # Entre le label du marqueur sélectionne dans le tableau et dans le dictionnaire, extend labelisation si tous les marqueurs labellisés
-    def label_in(self):
-        label = self.ids.label_input.text
+    def label_in(self, butt_instance):
+        for butt_id, button in self.ids.items():
+            if button == butt_instance:
+                id = butt_id
+        label = id[5:]
         self.canvas.remove_group(u"label")
 
         if m_to_label != [np.nan, np.nan]:
@@ -643,7 +646,18 @@ class MyApp(Widget):
                 
                 self.extend_labelisation()
 
-        print(nb_marqueurs)    
+                # reinit buttons for further manual labelization
+                self.ids.marq_C7.state = 'normal'
+                self.ids.marq_Tsup.state = 'normal'
+                self.ids.marq_Tap.state = 'normal'
+                self.ids.marq_Tinf.state = 'normal'
+                self.ids.marq_Lap.state = 'normal'
+                self.ids.marq_Linf.state = 'normal'
+                self.ids.marq_ScG.state = 'normal'
+                self.ids.marq_ScD.state = 'normal'
+                self.ids.marq_IG.state = 'normal'
+                self.ids.marq_ID.state = 'normal'
+   
         if np.isnan(nb_marqueurs):
             print('color')
             self.ids.nb_marqueurs.color = (1,0,0,1)
