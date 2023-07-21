@@ -558,8 +558,10 @@ class MyApp(Widget):
                 splines_smooth[l][0] = splev(x_axis, spl[l][0], ext=3)
                 splines_smooth[l][1] = splev(x_axis, spl[l][1], ext=3)
             else:
-                splines_smooth[l][0] = np.full((images_total, ), np.nan)
-                splines_smooth[l][0] = np.full((images_total, ), np.nan)
+                splines_smooth[l][0] = np.empty((images_total, ))
+                splines_smooth[l][0][:] = np.nan
+                splines_smooth[l][1] = np.empty((images_total, ))
+                splines_smooth[l][1][:] = np.nan
 
         return splines_smooth
 
