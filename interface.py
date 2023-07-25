@@ -27,6 +27,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.colors import ListedColormap
 from scipy.interpolate import splev, splrep
 from scipy.ndimage import gaussian_filter1d, median_filter
+from open3d.pipelines.registration import registration_icp, TransformationEstimationPointToPoint
+
 
 import read_raw_file as RRF
 import marker_detection
@@ -56,6 +58,8 @@ class MyApp(Widget):
         analyse_eff = False
         global detection_eff
         detection_eff = False
+        global coordo_xyz
+        coordo_xyz = False
         global labelize_extent
         labelize_extent = False
         global markers_rotated
@@ -162,12 +166,12 @@ class MyApp(Widget):
             print('BG')
             w1 = np.max(left-100, 0)
             w2 = right+50
-            h1 = int(body_HL[0])+150
+            h1 = int(body_HL[0])+100
         elif 'BD' in os.listdir(save_path_xyz)[0]:
             print('BD')
             w1 = left-50
             w2 = right+100
-            h1 = int(body_HL[0])+150
+            h1 = int(body_HL[0])+100
         else:
             print('other')
             w1 = np.max(left-80, 0)
@@ -188,7 +192,7 @@ class MyApp(Widget):
     def nb_marqueurs_input(self):
         global nb_marqueurs
         nb_marqueurs = int(self.ids.marq_nb_input.text)
-        self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs) # taille du tableau variable selon le nombre de marqueurs
+        self.ids.grid.size_hint = (.22, .04 + .02*nb_marqueurs) # taille du tableau variable selon le nombre de marqueurs
         self.ids.grid.rows = 1 + nb_marqueurs
         print(f'{nb_marqueurs} marqueurs utilisés')
         self.ids.nb_marqueurs.color = (1,1,1,1)
@@ -229,7 +233,7 @@ class MyApp(Widget):
         if self.ids.button_showmarks.state == 'down':
             self.show_marqueurs()
         if self.ids.button_distances.state == 'down':
-            self.remove_widget(self.Distances)
+            #self.remove_widget(self.Distances)
             self.show_distances()
             #self.show_marqueurs_gold()
             
@@ -247,7 +251,7 @@ class MyApp(Widget):
                     self.ids.rep_continuity.text = self.ids.rep_continuity.text[:-2]
 
         # Affiche positions dans le tableau après labellisation manuelle
-        if labelize_extent and not analyse_eff:
+        if labelize_extent and not coordo_xyz:
             self.ids.grid.clear_widgets()
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
@@ -260,11 +264,11 @@ class MyApp(Widget):
                     self.ids.grid.add_widget(Label(text=f'?', color=(0,0,0,1)))
     
         # Actualisation tableau de coordonnées avec coordos x,y,z si analyse effectuée
-        if analyse_eff:
+        if coordo_xyz:
             self.ids.grid.clear_widgets()
             self.ids.grid.cols = 4
             self.ids.grid.rows = 1 + nb_marqueurs
-            self.ids.grid.size_hint = (.27, .2)
+            self.ids.grid.size_hint = (.27, .24)
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Positions', color=(0,0,0,1)))
             self.ids.grid.add_widget(Label(text='Marqueurs', color=(0,0,0,1)))
@@ -291,6 +295,11 @@ class MyApp(Widget):
         # Efface les marques de labellisation manuelle (ronds bleus) si désactivé
         if self.ids.labelize_manual.state == 'normal':
             self.canvas.remove_group(u"label")
+
+        # Affiche le scatter plot avec les corrections manuelles (si bouton enfoncé)
+        if self.ids.button_correction.state == 'down':
+            self.ids.graph.clear_widgets()
+            self.show_correction_gold()
         
     # Fonction pour détecter les marqueurs de toutes les images du répertoire
     def detect_marqueurs(self):
@@ -338,7 +347,7 @@ class MyApp(Widget):
 
                 global nb_marqueurs
                 nb_marqueurs = len(dict_coordo_labels_manual['image1'])
-                self.ids.grid.size_hint = (.22, .04 + .03*nb_marqueurs)
+                self.ids.grid.size_hint = (.22, .04 + .02*nb_marqueurs)
                 self.ids.grid.rows = 1 + nb_marqueurs
 
                 detection_eff = True
@@ -373,12 +382,19 @@ class MyApp(Widget):
                                     dict_coordo_xyz_labels[key].update({l : [row[i], row[i+1], row[i+2]]})
                                     i += 3
                             j += 1
+
+                    global coordo_xyz
+                    coordo_xyz = True
+
                 else:
                     self.coordo_xyz_marqueurs()
                 
-                self.ids.button_analyze.disabled = False
-
                 self.analyse()
+                
+                self.ids.button_coordoxyz.state = 'down'
+                self.ids.button_analyze.state = 'down'
+                self.ids.button_coordoxyz.disabled = False
+                self.ids.button_analyze.disabled = False
 
         timer_fin_detection = time.process_time_ns()
         print(timer_debut_detection, timer_fin_detection)
@@ -427,9 +443,9 @@ class MyApp(Widget):
             for n in range(len(txt)):
                 if txt[n]==',':
                     count+=1
-                    if count == 20:
+                    if count == 30:
                         txt_multiline = txt[:n+1] + '\n' + txt[n+2:]
-                    if count > 20 and count%20 == 0:
+                    if count > 30 and count%30 == 0:
                         txt_multiline = txt_multiline[:n+1] + '\n' + txt_multiline[n+2:]
             if len(txt_multiline) > 1:
                 self.ids.im_prob_nb.text = txt_multiline[:-2]
@@ -711,6 +727,7 @@ class MyApp(Widget):
         self.ids.button_graph_continuity.disabled = False
         self.ids.button_delete.disabled = False
         self.ids.button_interpolate.disabled = False
+        self.ids.button_coordoxyz.disabled = False
         self.ids.button_analyze.disabled = False               
                         
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
@@ -737,6 +754,9 @@ class MyApp(Widget):
                     l = row[0]
                     row = [float(i) for i in row[1:]]
                     dict_coordo_xyz_labels[key].update({l:[row[1], row[0], row[2]]})
+
+        global coordo_xyz
+        coordo_xyz = True
     
     """ # Fonction de labelisation par tri (avec 8 marqueurs uniquement, selon coordonnées x,y,z)
     # Utilisée pour l'analyse
@@ -962,25 +982,27 @@ class MyApp(Widget):
         distances = {}
         self.rotate_markers()
 
-        for im, coordos in dict_coordo_xyz_labels_r.items():
-            distances.update({im:{}})
-            for l, c in coordos.items():
-                dist_pelvis = ((np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['IG']) - np.asarray(coordos['IG'])) + (np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['ID']) - np.asarray(coordos['ID']))) /2
-                distances[im].update({l: np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}'][l]) - np.asarray(c) - dist_pelvis})
-
         return distances, labels
     
     # Afficher les marqueurs du gold frame
     def show_marqueurs_gold(self):
-        pelvis_x_gold = (dict_coordo_labels_manual[f'image{gold_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{gold_nb}']['ID'][0]) /2
-        pelvis_y_gold = (dict_coordo_labels_manual[f'image{gold_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{gold_nb}']['ID'][1]) /2
+        if self.ids.check_corrected.state == 'normal' and self.ids.check_min.state == 'normal' and self.ids.check.max.state == 'normal':
+            gold_coordos = dict_coordo_labels_manual[f'image{gold_nb}']
+            coordinates = dict_coordo[f'image{gold_nb}']
+
+        pelvis_x_gold = (gold_coordos['IG'][0] + gold_coordos['ID'][0]) /2
+        pelvis_y_gold = (gold_coordos['IG'][1] + gold_coordos['ID'][1]) /2
         pelvis_x_act = (dict_coordo_labels_manual[f'image{image_nb}']['IG'][0] + dict_coordo_labels_manual[f'image{image_nb}']['ID'][0]) /2
         pelvis_y_act = (dict_coordo_labels_manual[f'image{image_nb}']['IG'][1] + dict_coordo_labels_manual[f'image{image_nb}']['ID'][1]) /2
+        
         global gold_coordo
         gold_coordo = []
-        for coordinates in dict_coordo[f'image{gold_nb}']:
-            x = coordinates[0] - pelvis_x_gold + pelvis_x_act
-            y = coordinates[1] - pelvis_y_gold + pelvis_y_act
+
+        print(coordinates)
+
+        for c in coordinates:
+            x = c[0] - pelvis_x_gold + pelvis_x_act
+            y = c[1] - pelvis_y_gold + pelvis_y_act
             gold_coordo.append([x, y])
             pos_x = self.width*(x/im_dim[1]*(self.ids.image_show.width/self.width) + 0.025)
             pos_y = self.height*(0.85 - y/im_dim[0]*0.78)
@@ -988,6 +1010,110 @@ class MyApp(Widget):
                 Color(245/255,168/255,2/255,1)
                 Line(circle=(pos_x, pos_y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
 
+
+    def ICP_registration(self, source, target):
+        pc_target = o3d.geometry.PointCloud()
+        pc_target.points = o3d.utility.Vector3dVector(target)
+        pc_source = o3d.geometry.PointCloud()
+        pc_source.points = o3d.utility.Vector3dVector(source)
+
+        trans_init = np.eye(4)
+        reg_p2p = registration_icp(pc_source, pc_target, 400, trans_init, TransformationEstimationPointToPoint())
+        pc_source_t = pc_source.transform(reg_p2p.transformation)
+        source_trans = np.asarray(pc_source_t.points)
+
+        RMSE = reg_p2p.inlier_rmse
+
+        return source_trans, RMSE
+
+    # 
+    def correction_gold(self):
+        path_pt = path[:(path.find('Participant')+14)]
+        correction_paths = ['Corrected/Prise01/Positions/positions_xyzr.json', 'Corrected/Prise02/Positions/positions_xyzr.json',
+                            'Maximum/Prise01/Positions/positions_xyzr.json', 'Maximum/Prise02/Positions/positions_xyzr.json',
+                            'Minimum/Prise01/Positions/positions_xyzr.json', 'Minimum/Prise02/Positions/positions_xyzr.json']
+
+        global arrays_corr
+        arrays_corr = {}
+
+        for key in dict_coordo_xyz_labels_r:
+            arrays_corr.update({key : {}})
+            for correction_path in correction_paths:
+                try:
+                    file_corr = open(os.path.join(path_pt, correction_path))
+                    dict_corr = json.load(file_corr)
+                    array_corr = np.asarray([[c_corr[0], c_corr[1], c_corr[2]] for c_corr in list(dict_corr.values())[len(dict_corr.values())//2].values()]) # sélection du frame central de la séquence
+                    array_auto = np.asarray([[c_corr[0], c_corr[1], c_corr[2]] for c_corr in list(dict_coordo_xyz_labels_r[key].values())]) # sélection du frame central de la séquence
+                    
+                    a = sorted(array_auto, key=lambda tup: tup[0])[0]
+                    b = sorted(array_corr, key=lambda tup: tup[0])[0]
+                    dist = np.subtract(a, b)
+                    array_corr = array_corr + dist
+
+                    array_corr_t, RMSE = self.ICP_registration(array_corr, array_auto)
+
+                    pelvis_auto = sorted(array_auto, key=lambda el: el[1])[:2]
+                    pelvis_corr_t = sorted(array_corr_t, key=lambda el: el[1])[:2]
+
+                    IG_auto = sorted(pelvis_auto, key=lambda el: el[0])[0]
+                    ID_auto = sorted(pelvis_auto, key=lambda el: el[0])[1]
+                    IG_corr = sorted(pelvis_corr_t, key=lambda el: el[0])[0]
+                    ID_corr = sorted(pelvis_corr_t, key=lambda el: el[0])[1]
+                    dist = (np.subtract(IG_auto, IG_corr) + np.subtract(ID_auto, ID_corr)) /2.0
+                    array_corr_t = array_corr_t + dist
+
+                    i = correction_path.find('/')
+                    arrays_corr[key].update({f'{correction_path[:i]} {correction_path[i+7:i+8]}': [array_corr_t, RMSE]})
+
+                except FileNotFoundError:
+                    continue
+        
+        """ for key, vals in arrays_corr.items():
+            for type_corr, RMSEs in vals.items():
+                min_RMSE.append
+        min_RMSE = [(i, min(vals)) for i, vals in enumerate (arrays_corr.values()).values()] """
+
+    # Affiche les positions souhaitées des marqueurs selon un type de correction manuelle (Droite, Minimale, Maximale)
+    def show_correction_gold(self):
+        try:
+            array_corr_t = arrays_corr[f'image{image_nb}']
+        except NameError:
+            self.correction_gold()
+            array_corr_t = arrays_corr[f'image{image_nb}']
+
+        if self.ids.button_correction.state == 'down':
+            correction_paths = []
+            if self.ids.check_corrected.state == 'down':
+                correction_paths += ['Corrected/Prise01/Positions/positions_xyzr.json', 'Corrected/Prise02/Positions/positions_xyzr.json']
+            if self.ids.check_max.state == 'down':
+                correction_paths += ['Maximum/Prise01/Positions/positions_xyzr.json', 'Maximum/Prise02/Positions/positions_xyzr.json']
+            if self.ids.check_min.state == 'down':
+                correction_paths += ['Minimum/Prise01/Positions/positions_xyzr.json', 'Minimum/Prise02/Positions/positions_xyzr.json']
+
+            for correction_path in correction_paths:
+                i = correction_path.find('/')
+                type_corr = f'{correction_path[:i]} {correction_path[i+7:i+8]}'
+                plt.scatter(array_corr_t[type_corr][0][:,0], array_corr_t[type_corr][0][:,1], label = f'{type_corr} : RMSE = {array_corr_t[type_corr][1]:.4f}')
+                    
+            array_auto = np.asarray([[c_corr[0], c_corr[1], c_corr[2]] for c_corr in list(dict_coordo_xyz_labels_r[f'image{image_nb}'].values())]) # sélection du frame central de la séquence
+            
+            plt.scatter(array_auto[:,0], array_auto[:,1], label='Autocorrection')
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+            plt.title('Positions actuelles et visées des marqueurs')
+            plt.xlabel('Coordonnée en x')
+            plt.ylabel('Coordonnée en y')
+            plt.gca().set_aspect("equal")
+            plt.tight_layout()
+            self.ids.graph.size_hint = (.4, .73)
+            self.ids.graph.pos_hint = {'x':.53, 'top':.73}
+            self.ids.graph.add_widget(FigureCanvasKivyAgg(plt.gcf()))
+            plt.close()
+
+        else:
+            self.ids.graph.clear_widgets()
+            self.ids.graph.size_hint = (.47, .6)
+            self.ids.graph.pos_hint = {'x':.53, 'top':.6}
+    
     # Affiche ou efface les distances selon l'état du bouton
     def toggle_distances(self):
         if self.ids.button_distances.state == 'down':
@@ -997,7 +1123,6 @@ class MyApp(Widget):
 
     # Afficher les distances sur l'image actuelle, une fois l'analyse effectuée
     def show_distances(self):
-        
         distances, labels = self.distance_to_gold()
         print(distances)
         self.show_marqueurs_gold()
@@ -1160,24 +1285,23 @@ class MyApp(Widget):
         with open(save_pos+'/positions_corrigees.json', 'w') as positions:
             json.dump(dict_coordo_labels_manual, positions)
     
+        if coordo_xyz:
+            with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=';')
+                entete = ['image no']
+                for l in dict_coordo_xyz_labels['image1'].keys():
+                    entete += [f'{l} x', f'{l} y', f'{l} z']
+                writer.writerow(entete)
+                for im, coordos in dict_coordo_xyz_labels.items():
+                    row = [im[5:]]
+                    for l in dict_coordo_xyz_labels['image1'].keys():
+                        row += [coordos[l][0], coordos[l][1], coordos[l][2]]
+                    writer.writerow(row)
+            with open(save_pos+'/positions_xyzr.json', 'w') as positions:
+                json.dump(dict_coordo_xyz_labels_r, positions)
+    
     # Crée un csv et y écrit les métriques et le score global pour chaque image
     def save_metriques(self):
-        save_pos = path+'/Positions'
-        with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            entete = ['image no']
-            for l in dict_coordo_xyz_labels['image1'].keys():
-                entete += [f'{l} x', f'{l} y', f'{l} z']
-            writer.writerow(entete)
-            for im, coordos in dict_coordo_xyz_labels.items():
-                row = [im[5:]]
-                for l in dict_coordo_xyz_labels['image1'].keys():
-                    row += [coordos[l][0], coordos[l][1], coordos[l][2]]
-                writer.writerow(row)
-        
-        with open(save_pos+'/positions_xyzr.json', 'w') as positions:
-            json.dump(dict_coordo_xyz_labels_r, positions)
-
         save_met = path+'/Metriques/metriques.csv'
         with open(save_met, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')

@@ -131,7 +131,7 @@ def detect_markers(frame, params=None):
     # params.filterByInertia = True
     # params.minInertiaRatio = 0.5
 
-    params.minDistBetweenBlobs = 40
+    params.minDistBetweenBlobs = 30
 
     detector = cv2.SimpleBlobDetector_create(params)
     key_points = detector.detect(frame)

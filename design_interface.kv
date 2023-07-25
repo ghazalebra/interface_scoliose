@@ -15,19 +15,23 @@
         size: root.width, root.height
         Label:
             text:'Nouveau'
-            size_hint: (.04, .05)
-            pos_hint: {'x':.01, 'top':.99}
+            group: 'mode'
+            size_hint: (.04, .03)
+            pos_hint: {'x':.01, 'top':.97}
         Label:
             text:'Ouvrir'
+            group: 'mode'
             halign:'left'
-            size_hint: (.03, .05)
-            pos_hint: {'x':.01, 'top':.94}
+            size_hint: (.03, .03)
+            pos_hint: {'x':.01, 'top':.93}
         CheckBox:
             id:check_new
-            pos_hint: {'x':.045, 'top':.99}
+            pos_hint: {'x':.045, 'top':.97}
+            size_hint: (.03, .03)
         CheckBox:
             id:check_open
-            pos_hint: {'x':.045, 'top':.94}
+            pos_hint: {'x':.045, 'top':.93}
+            size_hint: (.03, .03)
         Label:
             text:'Entrez le chemin vers le répertoire ou le fichier (.raw) :'
             size_hint: (.28, .04)
@@ -142,12 +146,20 @@
             ToggleButton:
                 id: button_graph_continuity
                 text: "Afficher les graphiques\nde continuité"
+                group: 'graph'
                 disabled: True
                 on_press: root.press_color()
                 on_press: root.graph_continuity()
             ToggleButton:
+                id: button_coordoxyz
+                text: "Récupérer les\ncoordonnées 3D"
+                disabled: True
+                on_press: root.press_color()
+                on_press: root.coordo_xyz_marqueurs()
+            ToggleButton:
                 id: button_analyze
                 text: "Confirmer et\nlancer l'analyse"
+                group: 'graph'
                 disabled: True
                 on_press: root.press_color()
                 on_press: root.analyse()
@@ -166,7 +178,7 @@
                 on_press: root.show_profondeur()
         GridLayout:
             pos_hint:{'x':.38, 'top':.29}
-            size_hint:{.14, .1}
+            size_hint:{.14, .08}
             cols: 5
             rows: 2
             spacing: 2
@@ -228,19 +240,6 @@
             pos_hint: {'x':.03, 'top':.85}
             allow_stretch: False
             keep_ratio: True
-        # Label:
-        #     text: 'Label :'
-        #     font_size: 15
-        #     size_hint: (.07, .05)
-        #     pos_hint:{'x':.39, 'top':.28}
-        # TextInput:
-        #     id: label_input
-        #     text: ''
-        #     font_size: 15
-        #     size_hint: (.04, .04)
-        #     pos_hint:{'x':.46, 'top':.28}
-        #     multiline: False
-        #     on_text_validate: root.label_in()
         GridLayout:
             id:grid
             cols:2
@@ -266,15 +265,15 @@
             id: image_nb
             text: 'Image no :'
             font_size: 15
-            size_hint: (.07, .05)
-            pos_hint:{'x':.385, 'top':.06}
+            size_hint: (.07, .04)
+            pos_hint:{'x':.385, 'top':.05}
         TextInput:
             id: image_nb_input
             multiline: False
             text: ''
             font_size: 15
-            size_hint: (.048, .045)
-            pos_hint:{'x':.455, 'top':.06}
+            size_hint: (.048, .04)
+            pos_hint:{'x':.455, 'top':.05}
             on_text_validate: root.image_nb_input()
         Label:
             id: image_total
@@ -288,8 +287,8 @@
             font_size: 15
             halign: 'left'
             valign:'top'
-            size_hint: (.2, .2)
-            pos_hint:{'x':.55, 'top':.74}
+            size_hint: (.3, .2)
+            pos_hint:{'x':.56, 'top':.75}
         Label:
             id: rep_continuity
             text: ''
@@ -307,69 +306,115 @@
             text:'Infos à sauvegarder :'
             fontsize: 18
             halign: 'left'
-            size_hint: (.15, .1)
-            pos_hint: {'x':.83, 'top':.99}
+            size_hint: (.14, .03)
+            pos_hint: {'x':.84, 'top':.99}
         Label:
             text:'Positions corrigées'
             fontsize: 15
-            size_hint: (.105, .1)
-            pos_hint: {'x':.82, 'top':.93}
+            size_hint: (.11, .03)
+            pos_hint: {'x':.84, 'top':.95}
         Label:
             text:'Métriques de symétrie'
             fontsize: 15
-            size_hint: (.11, .1)
-            pos_hint: {'x':.82, 'top':.87}
+            size_hint: (.11, .03)
+            pos_hint: {'x':.84, 'top':.92}
         Label:
             text:'Graphiques des métriques'
             fontsize: 15
-            size_hint: (.12, .1)
-            pos_hint: {'x':.82, 'top':.81}
+            size_hint: (.11, .03)
+            pos_hint: {'x':.84, 'top':.89}
         CheckBox:
             id:save_positions
-            pos_hint: {'x':.96, 'top':.91}
+            pos_hint: {'x':.96, 'top':.95}
+            size_hint: (.03, .03)
         CheckBox:
             id:save_metriques
-            pos_hint: {'x':.96, 'top':.85}
+            pos_hint: {'x':.96, 'top':.92}
+            size_hint: (.03, .03)
         CheckBox:
             id:save_graph
-            pos_hint: {'x':.96, 'top':.79}
+            pos_hint: {'x':.96, 'top':.89}
+            size_hint: (.03, .03)
         Button:
             id:save
             text:'Sauvegarder'
-            pos_hint: {'x':.83, 'top':.73}
-            size_hint: (.13, .04)
+            pos_hint: {'x':.85, 'top':.85}
+            size_hint: (.13, .03)
             background_normal:''
             background_color:(24/255.0, 192/255.0, 214/255.0, 1)
             on_press: root.press_color()
             on_press: root.to_save()
         Label:
-            text: 'Meilleure symétrie atteinte'
+            text: 'Meilleure symétrie'
             fontsize: 15
             halign:'left'
-            pos_hint:{'x':.41, 'top':.16}
-            size_hint:(.1, .02)
+            color: (223/255.0, 2/255.0, 235/255.0, 1)
+            pos_hint:{'x':.37, 'top':.2}
+            size_hint:(.08, .02)
         Label:
             id:im_best
             text: 'Image no'
-            fontsize: 18
+            fontsize: 15
             halign:'left'
-            pos_hint:{'x':.4, 'top':.13}
-            size_hint:(.1, .02)
+            pos_hint:{'x':.37, 'top':.17}
+            size_hint:(.05, .02)
         TextInput:
             id:input_gold_nb
             multiline: False
             text: ''
             font_size: 15
             size_hint: (.02, .03)
-            pos_hint:{'x':.48, 'top':.135}
+            pos_hint:{'x':.42, 'top':.175}
             on_text_validate: root.gold_nb_input()
         Label:
             id:sym_best
             text: 'Score :'
-            fontsize: 18
+            fontsize: 15
             halign:'left'
-            pos_hint:{'x':.39, 'top':.1}
-            size_hint:(.1, .02)
+            pos_hint:{'x':.37, 'top':.14}
+            size_hint:(.06, .02)
+        Label:
+            text: 'Correction visée :'
+            fontsize: 15
+            pos_hint:{'x':.46, 'top':.2}
+            size_hint:(.05, .02)
+        Label:
+            text: 'Droite'
+            fontsize: 12
+            pos_hint:{'x':.45, 'top':.18}
+            size_hint:(.05, .02)
+        Label:
+            text: 'Minimale'
+            fontsize: 12
+            pos_hint:{'x':.45, 'top':.16}
+            size_hint:(.05, .02)
+        Label:
+            text: 'Maximale'
+            fontsize: 12
+            pos_hint:{'x':.45, 'top':.14}
+            size_hint:(.05, .02)
+        CheckBox:
+            id: check_corrected
+            pos_hint: {'x':.5, 'top':.18}
+            size_hint: (.02, .02)
+        CheckBox:
+            id: check_min
+            pos_hint: {'x':.5, 'top':.16}
+            size_hint: (.02, .02)
+        CheckBox:
+            id: check_max
+            pos_hint: {'x':.5, 'top':.14}
+            size_hint: (.02, .02)
+        ToggleButton:
+            id: button_correction
+            text: 'Afficher corrections'
+            group: 'graph'
+            pos_hint: {'x':.43, 'top':.10}
+            size_hint: (.09, .03)
+            on_press: root.press_color()
+            on_press: root.show_correction_gold()
+            
+
 
 <Touch>:
     BoxLayout:
