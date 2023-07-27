@@ -140,7 +140,7 @@ class MyApp(Widget):
         if 'Contraint' in os.listdir(save_path_xyz)[0]:
             z_nobg[np.where(z > body_z + 150)] = False
         else:
-            z_nobg[np.where(z > body_z + 300)] = False
+            z_nobg[np.where(z > body_z + 250)] = False
         z_nobg = median_filter(z_nobg, 3)
 
         return z_nobg
@@ -176,7 +176,7 @@ class MyApp(Widget):
             print('other')
             w1 = np.max(left-80, 0)
             w2 = right+80
-            h1 = int(body_HL[0])+100
+            h1 = int(body_HL[0])+50
 
         h2 = h1+int(6/5*(w2-w1))
         print(w1, w2, h1, h2)
@@ -295,11 +295,6 @@ class MyApp(Widget):
         # Efface les marques de labellisation manuelle (ronds bleus) si désactivé
         if self.ids.labelize_manual.state == 'normal':
             self.canvas.remove_group(u"label")
-
-        # Affiche le scatter plot avec les corrections manuelles (si bouton enfoncé)
-        if self.ids.button_correction.state == 'down':
-            self.ids.graph.clear_widgets()
-            self.show_correction_gold()
         
     # Fonction pour détecter les marqueurs de toutes les images du répertoire
     def detect_marqueurs(self):
@@ -391,9 +386,7 @@ class MyApp(Widget):
                 
                 self.analyse()
                 
-                self.ids.button_coordoxyz.state = 'down'
                 self.ids.button_analyze.state = 'down'
-                self.ids.button_coordoxyz.disabled = False
                 self.ids.button_analyze.disabled = False
 
         timer_fin_detection = time.process_time_ns()
@@ -727,7 +720,6 @@ class MyApp(Widget):
         self.ids.button_graph_continuity.disabled = False
         self.ids.button_delete.disabled = False
         self.ids.button_interpolate.disabled = False
-        self.ids.button_coordoxyz.disabled = False
         self.ids.button_analyze.disabled = False               
                         
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
@@ -781,6 +773,8 @@ class MyApp(Widget):
             dict_coordo_xyz_labels[im].update({'T2': coordos_sorted_x[1]}) """
 
     def analyse(self):
+        global dict_metriques
+
         timer_debut_analyse = time.process_time_ns()
         im_prob_nb = self.verif_nb()
         if len(im_prob_nb) == 0:
@@ -788,11 +782,12 @@ class MyApp(Widget):
             analyse_eff = True
             if self.ids.check_new.state == 'down' or 'coordonnees_xyz.csv' not in os.listdir(path+'/Positions/'):
                 self.coordo_xyz_marqueurs()
-                """ if nb_marqueurs in [8, 9]:
-                    self.labelize_8() """
+
             self.rotate_markers()
-            if self.ids.button_analyze.state == 'down' or self.ids.check_open.state == 'down':
-                global dict_metriques
+
+            if self.ids.button_analyze.state == 'down':
+                self.coordo_xyz_marqueurs()
+
                 dict_metriques = {'angle_scap_vert' : [], 'angle_scap_prof': [], 'diff_dg': []}
 
                 for im, coordo in dict_coordo_xyz_labels_r.items():
@@ -820,6 +815,8 @@ class MyApp(Widget):
                     dict_metriques.update(self.analyse_5())
                 if nb_marqueurs in [8,9,10]:
                     dict_metriques.update(self.analyse_8())
+
+                print(dict_metriques)
 
                 # Recherche des metriques optimales (et images associées)
                 global min_metriques
@@ -910,6 +907,7 @@ class MyApp(Widget):
         return max_sym_im, max_sym
 
     def graph_analyze(self):
+        global dict_metriques
         # Graphiques des metriques calculées selon l'image
         xaxis = range(1, images_total+1)
         fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2)
@@ -951,6 +949,49 @@ class MyApp(Widget):
         ax4.scatter(min_metriques[metrique_4][0]+1, min_metriques[metrique_4][1], marker='*', c='r')
         ax4.set_xlabel("Numéro de l'image", fontsize=9)
         
+        path_pt = path[:(path.find('Participant')+14)]
+        print(path_pt)
+
+        corrections = {}
+        if self.ids.check_corrected.state == 'down':
+            corrections.update({'Droit 1' : (os.path.join(path_pt, 'Corrected/Prise01/Metriques/metriques.csv'))})
+            corrections.update({'Droit 2' : (os.path.join(path_pt, 'Corrected/Prise02/Metriques/metriques.csv'))})
+        if self.ids.check_max.state == 'down':
+            corrections.update({'Max 1' : (os.path.join(path_pt, 'Maximum/Prise01/Metriques/metriques.csv'))})
+            corrections.update({'Max 2' : (os.path.join(path_pt, 'Maximum/Prise02/Metriques/metriques.csv'))})
+        if self.ids.check_min.state == 'down':
+            corrections.update({'Min 1' : (os.path.join(path_pt, 'Minimum/Prise01/Metriques/metriques.csv'))})
+            corrections.update({'Min 2' : (os.path.join(path_pt, 'Minimum/Prise02/Metriques/metriques.csv'))})
+        
+        colors = ['tab:red', 'tab:green', 'k', 'tab:purple', 'c', 'tab:gray', 'tab:pink']
+        for (type_cor, path_cor), col in zip(corrections.items(), colors):
+            try:
+                with open(path_cor, 'r') as csvfile:
+                            reader = csv.reader(csvfile, delimiter=';')
+                            j = 0
+                            for row in reader: #skip headline
+                                if j == 0:
+                                    entete = row[1:-1]
+                                    for e in entete:
+                                        dict_metriques.update({e: []})
+                                elif j > 0:
+                                    for m, e in zip(row[1:-1], dict_metriques.keys()):
+                                        dict_metriques[e].append(float(m))
+                                j += 1
+                print(dict_metriques)
+                moy_metriques = {}
+
+                for metrique, valeurs in dict_metriques.items():
+                    moy_metriques.update({metrique : np.mean(valeurs)})
+                ax1.axhline(moy_metriques['angle_scap_vert'], label=type_cor, color=col)
+                ax1.axhline(moy_metriques['angle_scap_prof'], label=type_cor, color=col)
+                ax2.axhline(moy_metriques['diff_dg'], label=type_cor, color=col)
+                ax3.axhline(moy_metriques['dejettement'], label=type_cor, color=col)
+                ax4.axhline(moy_metriques['scoliosis'], label=type_cor, color=col)
+                plt.legend()
+            except FileNotFoundError:
+                continue
+
         plt.tight_layout()
     
     # Définir le numéro du gold frame (par défaut, meilleure symétrie, sinon input)
@@ -1068,11 +1109,6 @@ class MyApp(Widget):
                 except FileNotFoundError:
                     continue
         
-        """ for key, vals in arrays_corr.items():
-            for type_corr, RMSEs in vals.items():
-                min_RMSE.append
-        min_RMSE = [(i, min(vals)) for i, vals in enumerate (arrays_corr.values()).values()] """
-
     # Affiche les positions souhaitées des marqueurs selon un type de correction manuelle (Droite, Minimale, Maximale)
     def show_correction_gold(self):
         try:
@@ -1171,6 +1207,7 @@ class MyApp(Widget):
         
         global dict_coordo_xyz_labels_r
         dict_coordo_xyz_labels_r = {}
+        
         for i, (coordo, coordo_r) in enumerate(zip(dict_coordo_xyz_labels.values(), dict_coordo_xyz_rotated.values())):
             for l in coordo.keys():
                 dist = []

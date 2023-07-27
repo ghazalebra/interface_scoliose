@@ -110,6 +110,11 @@
                 text:"Afficher les\nmarqueurs"
                 on_press: root.press_color()
                 on_press: root.show_marqueurs()
+            # ToggleButton:
+            #     id: button_tapir
+            #     text:"TAPIR"
+            #     on_press: root.press_color()
+            #     on_press: root.tapir()
             ToggleButton:
                 id: labelize_manual
                 text:"Activer la\nlabellisation manuelle"
@@ -150,12 +155,6 @@
                 disabled: True
                 on_press: root.press_color()
                 on_press: root.graph_continuity()
-            ToggleButton:
-                id: button_coordoxyz
-                text: "Récupérer les\ncoordonnées 3D"
-                disabled: True
-                on_press: root.press_color()
-                on_press: root.coordo_xyz_marqueurs()
             ToggleButton:
                 id: button_analyze
                 text: "Confirmer et\nlancer l'analyse"
@@ -405,14 +404,14 @@
             id: check_max
             pos_hint: {'x':.5, 'top':.14}
             size_hint: (.02, .02)
-        ToggleButton:
-            id: button_correction
-            text: 'Afficher corrections'
-            group: 'graph'
-            pos_hint: {'x':.43, 'top':.10}
-            size_hint: (.09, .03)
-            on_press: root.press_color()
-            on_press: root.show_correction_gold()
+        # ToggleButton:
+        #     id: button_correction
+        #     text: 'Afficher corrections'
+        #     group: 'graph'
+        #     pos_hint: {'x':.43, 'top':.10}
+        #     size_hint: (.09, .03)
+        #     on_press: root.press_color()
+        #     on_press: root.show_correction_gold()
             
 
 
