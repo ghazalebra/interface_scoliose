@@ -233,9 +233,9 @@ class MyApp(Widget):
         if self.ids.button_showmarks.state == 'down':
             self.show_marqueurs()
         if self.ids.button_distances.state == 'down':
-            #self.remove_widget(self.Distances)
+            self.remove_widget(self.Distances)
+            self.show_marqueurs_gold()
             self.show_distances()
-            #self.show_marqueurs_gold()
             
         # Affiche les numéros d'images n'ayant pas le bon nb de marqueurs si bouton activé
         if self.ids.button_verif_nb.state == 'down':
@@ -385,6 +385,8 @@ class MyApp(Widget):
                     self.coordo_xyz_marqueurs()
                 
                 self.analyse()
+                global analyse_eff
+                analyse_eff = True
                 
                 self.ids.button_analyze.state = 'down'
                 self.ids.button_analyze.disabled = False
@@ -954,13 +956,13 @@ class MyApp(Widget):
 
         corrections = {}
         if self.ids.check_corrected.state == 'down':
-            corrections.update({'Droit 1' : (os.path.join(path_pt, 'Corrected/Prise01/Metriques/metriques.csv'))})
+            #corrections.update({'Droit 1' : (os.path.join(path_pt, 'Corrected/Prise01/Metriques/metriques.csv'))})
             corrections.update({'Droit 2' : (os.path.join(path_pt, 'Corrected/Prise02/Metriques/metriques.csv'))})
         if self.ids.check_max.state == 'down':
-            corrections.update({'Max 1' : (os.path.join(path_pt, 'Maximum/Prise01/Metriques/metriques.csv'))})
+            #corrections.update({'Max 1' : (os.path.join(path_pt, 'Maximum/Prise01/Metriques/metriques.csv'))})
             corrections.update({'Max 2' : (os.path.join(path_pt, 'Maximum/Prise02/Metriques/metriques.csv'))})
         if self.ids.check_min.state == 'down':
-            corrections.update({'Min 1' : (os.path.join(path_pt, 'Minimum/Prise01/Metriques/metriques.csv'))})
+            #corrections.update({'Min 1' : (os.path.join(path_pt, 'Minimum/Prise01/Metriques/metriques.csv'))})
             corrections.update({'Min 2' : (os.path.join(path_pt, 'Minimum/Prise02/Metriques/metriques.csv'))})
         
         colors = ['tab:red', 'tab:green', 'k', 'tab:purple', 'c', 'tab:gray', 'tab:pink']
@@ -985,10 +987,13 @@ class MyApp(Widget):
                     moy_metriques.update({metrique : np.mean(valeurs)})
                 ax1.axhline(moy_metriques['angle_scap_vert'], label=type_cor, color=col)
                 ax1.axhline(moy_metriques['angle_scap_prof'], label=type_cor, color=col)
+                ax1.legend()
                 ax2.axhline(moy_metriques['diff_dg'], label=type_cor, color=col)
+                ax2.legend()
                 ax3.axhline(moy_metriques['dejettement'], label=type_cor, color=col)
+                ax3.legend()
                 ax4.axhline(moy_metriques['scoliosis'], label=type_cor, color=col)
-                plt.legend()
+                ax4.legend()
             except FileNotFoundError:
                 continue
 
@@ -1023,11 +1028,18 @@ class MyApp(Widget):
         distances = {}
         self.rotate_markers()
 
+        for im, coordos in dict_coordo_xyz_labels_r.items():
+            distances.update({im:{}})
+            for l, c in coordos.items():
+                dist_pelvis = ((np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['IG']) - np.asarray(coordos['IG'])) + (np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}']['ID']) - np.asarray(coordos['ID']))) /2
+                distances[im].update({l: np.asarray(dict_coordo_xyz_labels_r[f'image{gold_nb}'][l]) - np.asarray(c) - dist_pelvis})
+
+
         return distances, labels
     
     # Afficher les marqueurs du gold frame
     def show_marqueurs_gold(self):
-        if self.ids.check_corrected.state == 'normal' and self.ids.check_min.state == 'normal' and self.ids.check.max.state == 'normal':
+        if self.ids.check_corrected.state == 'normal' and self.ids.check_min.state == 'normal' and self.ids.check_max.state == 'normal':
             gold_coordos = dict_coordo_labels_manual[f'image{gold_nb}']
             coordinates = dict_coordo[f'image{gold_nb}']
 
@@ -1051,8 +1063,46 @@ class MyApp(Widget):
                 Color(245/255,168/255,2/255,1)
                 Line(circle=(pos_x, pos_y,6,0,360), width=1.1, group=u"circle_gold") #(center_x, center_y, radius, angle_start, angle_end, segments)
 
+    # Affiche ou efface les distances selon l'état du bouton
+    def toggle_distances(self):
+        if self.ids.button_distances.state == 'down':
+            self.show_distances()
+        elif self.ids.button_distances.state == 'normal':
+            self.erase_distances()
 
-    def ICP_registration(self, source, target):
+    # Afficher les distances sur l'image actuelle, une fois l'analyse effectuée
+    def show_distances(self):
+        distances, labels = self.distance_to_gold()
+        print(distances)
+        self.show_marqueurs_gold()
+
+        self.ids.xyz_axis.size_hint = (.05, .09)
+        self.ids.xyz_axis.source = 'xyz_axis.png'
+        dist_act = {}
+        for l in labels:
+            dist_act.update({l: distances[f'image{image_nb}'][l]})
+
+        self.Distances = Widget()
+        for l in labels:
+            coordinates = dict_coordo_labels_manual[f'image{gold_nb}'][l]
+            x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.025
+            y = 0.85 - (coordinates[1]/im_dim[0])*0.78
+            xyz = [round(dist_act[l][0]), round(dist_act[l][1]), round(dist_act[l][2])]
+            xyz_plus = [f'+{dist}' if dist > 0 else str(dist) for dist in xyz]
+            self.dist_txt = Label(text=f'{l} (X, Y, Z)\n({xyz_plus[0]}, {xyz_plus[1]}, {xyz_plus[2]})',
+                                fontsize='10sp', color=(1,1,1,1), size_hint=(.15, .15), pos=(self.width*x+20, self.height*y-30))
+            self.Distances.add_widget(self.dist_txt)
+
+        self.add_widget(self.Distances)
+
+    # efface annotations précécentes (surtout utile si changement du gold_nb)
+    def erase_distances(self):
+        self.remove_widget(self.Distances)
+        self.canvas.remove_group(u"circle_gold")
+
+
+# ICP registration to align and show manual corrections markers's positions on actual image
+    """ def ICP_registration(self, source, target):
         pc_target = o3d.geometry.PointCloud()
         pc_target.points = o3d.utility.Vector3dVector(target)
         pc_source = o3d.geometry.PointCloud()
@@ -1067,7 +1117,6 @@ class MyApp(Widget):
 
         return source_trans, RMSE
 
-    # 
     def correction_gold(self):
         path_pt = path[:(path.find('Participant')+14)]
         correction_paths = ['Corrected/Prise01/Positions/positions_xyzr.json', 'Corrected/Prise02/Positions/positions_xyzr.json',
@@ -1148,42 +1197,7 @@ class MyApp(Widget):
         else:
             self.ids.graph.clear_widgets()
             self.ids.graph.size_hint = (.47, .6)
-            self.ids.graph.pos_hint = {'x':.53, 'top':.6}
-    
-    # Affiche ou efface les distances selon l'état du bouton
-    def toggle_distances(self):
-        if self.ids.button_distances.state == 'down':
-            self.show_distances()
-        elif self.ids.button_distances.state == 'normal':
-            self.erase_distances()
-
-    # Afficher les distances sur l'image actuelle, une fois l'analyse effectuée
-    def show_distances(self):
-        distances, labels = self.distance_to_gold()
-        print(distances)
-        self.show_marqueurs_gold()
-
-        self.ids.xyz_axis.size_hint = (.05, .09)
-        self.ids.xyz_axis.source = 'xyz_axis.png'
-        dist_act = {}
-        for l in labels:
-            dist_act.update({l: distances[f'image{image_nb}'][l]})
-
-        self.Distances = Widget()
-        for l in labels:
-            coordinates = dict_coordo_labels_manual[f'image{gold_nb}'][l]
-            x = (coordinates[0]/im_dim[1])*(self.ids.image_show.width/self.width) + 0.025
-            y = 0.85 - (coordinates[1]/im_dim[0])*0.78
-            self.dist_txt = Label(text=f'{l}\nX : {dist_act[l][0]:.0f}\nY : {dist_act[l][1]:.0f}\nZ : {dist_act[l][2]:.0f}',
-                                fontsize='10sp', color=(1,1,1,1), size_hint=(.2, .2), pos=(self.width*x, self.height*y))
-            self.Distances.add_widget(self.dist_txt)
-
-        self.add_widget(self.Distances)
-
-    # efface annotations précécentes (surtout utile si changement du gold_nb)
-    def erase_distances(self):
-        self.remove_widget(self.Distances)
-        self.canvas.remove_group(u"circle_gold")
+            self.ids.graph.pos_hint = {'x':.53, 'top':.6}  """
     
     def rotate_markers(self):
         dict_coordo_xyz_rotated = {}
@@ -1243,19 +1257,6 @@ class MyApp(Widget):
 
     def show_profondeur(self):
         if len(os.listdir(save_path_depth)) == 0 or self.ids.check_new.state == 'down':
-            """ ID = dict_coordo_xyz_labels['image1']['ID']
-            IG = dict_coordo_xyz_labels['image1']['IG']
-            print(f'ID : {ID}, IG : {IG}')
-            pelvis = ((IG[0]+ID[0])/2, (IG[1]+ID[1])/2, (IG[2]+ID[2])/2)
-            rz = (math.atan((ID[1] - pelvis[1])/(ID[0] - pelvis[0])) + math.atan((pelvis[1] - IG[1])/(pelvis[0] - IG[0]))) /2
-            rx = (math.atan((ID[2] - pelvis[2])/(ID[0] - pelvis[0])) + math.atan((pelvis[2] - IG[2])/(pelvis[0] - IG[0]))) /2
-
-            xyz_pc = o3d.geometry.PointCloud()
-            xyz_pc_points = np.load(os.path.join(save_path_xyz, os.listdir(save_path_xyz)[0]))
-            xyz_pc.points = o3d.utility.Vector3dVector(xyz_pc_points)
-
-            matrix_R = xyz_pc.get_rotation_matrix_from_xyz((0, rx, -rz)) """
-
             for file in os.listdir(save_path_xyz):
                 xyz = np.load(os.path.join(save_path_xyz, file))
                 xyz_r = linalg.matmul(xyz, matrix_R)
