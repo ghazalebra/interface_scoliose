@@ -341,20 +341,20 @@ class MyApp(Widget):
             frames[i,:,:,:] = image
 
         resize_width = int((256/width*height)//8 * 8)
+        frames = np.asarray([cv2.resize(frame, (256, resize_width)) for frame in frames])
 
         query_points = TAPIR.convert_select_points_to_query_points(image_nb-1, select_points)
         query_points = transforms.convert_grid_coordinates(
             query_points, (image_nb, height, width), (image_nb, 256, resize_width), coordinate_format='tyx')
 
-        frames = np.asarray([cv2.resize(frame, (256, resize_width)) for frame in frames])
         tracks, visibles = TAPIR.inference(frames, query_points)
 
         # Visualize sparse point tracks
         print(height, width, resize_width)
-        tracks = transforms.convert_grid_coordinates(tracks, (256, resize_width), (height, width))
+        tracks = transforms.convert_grid_coordinates(tracks, (resize_width, 256), (width, height))
 
         for im in range(image_nb, len(tracks[0,:,0])):
-            points = [[point[0]*0.7, point[1]*1.4] for point in tracks[:,im,:]]
+            points = [[point[0], point[1]] for point in tracks[:,im,:]]
             dict_coordo.update({f'image{im+1}': points})
         
         print(dict_coordo)
@@ -690,7 +690,6 @@ class MyApp(Widget):
         self.ids.button_graph_continuity.disabled = False
         self.ids.button_delete.disabled = False
         self.ids.button_interpolate.disabled = False
-        self.ids.button_coordoxyz.disabled = False
         self.ids.button_analyze.disabled = False               
                         
     # Fonction pour extraire les coordonnées (x,y,z) des marqueurs des fichiers _xyz_.raw
