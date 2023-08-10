@@ -27,7 +27,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.colors import ListedColormap
 from scipy.interpolate import splev, splrep
 from scipy.ndimage import gaussian_filter1d, median_filter
-from open3d.pipelines.registration import registration_icp, TransformationEstimationPointToPoint
+#from open3d.pipelines.registration import registration_icp, TransformationEstimationPointToPoint
 
 
 import read_raw_file as RRF
@@ -384,6 +384,7 @@ class MyApp(Widget):
                 else:
                     self.coordo_xyz_marqueurs()
                 
+                self.ids.button_analyze.state = 'down'
                 self.analyse()
                 global analyse_eff
                 analyse_eff = True
@@ -711,7 +712,7 @@ class MyApp(Widget):
                             if (abs(coordos[0] - ref[0]) < 12 and abs(coordos[1] - ref[1]) < 10) or (abs(coordos[0] - ref_prec[0]) < 12 and abs(coordos[1] - ref_prec[1]) < 10):
                                 dict_coordo_labels_manual[im][label] = coordos                            
                                 break
-                            elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref[0]-ref_prec[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref[1]-ref_prec[1])/(j-i)+ref[1])) < 9:
+                            elif ref_prec != [0,0] and -7 < (coordos[0] - (i*(ref_prec[0]-ref[0])/(j-i)+ref[0])) < 9 and -7 < (coordos[1] - (i*(ref_prec[1]-ref[1])/(j-i)+ref[1])) < 9:
                                 dict_coordo_labels_manual[im][label] = coordos
                                 break
                         else:
@@ -795,7 +796,7 @@ class MyApp(Widget):
                 for im, coordo in dict_coordo_xyz_labels_r.items():
                     scap_y = np.degrees(np.arctan((coordo['ScD'][1] - coordo['ScG'][1])/(coordo['ScD'][0] - coordo['ScG'][0])))
                     dict_metriques['angle_scap_vert'].append(scap_y)
-                    scap_z = np.degrees(np.arctan((coordo['ScG'][2] - coordo['ScD'][2])/(coordo['ScD'][0] - coordo['ScG'][0]))) #ajouter avec z
+                    scap_z = np.degrees(np.arctan((coordo['ScD'][2] - coordo['ScG'][2])/(coordo['ScD'][0] - coordo['ScG'][0]))) #ajouter avec z
                     dict_metriques['angle_scap_prof'].append(scap_z)
 
                     # calcul distance horizontale entre marqueurs D/G et l'axe du rachis (x=ay+b)
@@ -1268,7 +1269,7 @@ class MyApp(Widget):
                 z[z == 0] = np.max(z) + 50 #convert background at 0 to deepest
                 
                 weights = np.ones((z.shape))
-                weights[z > np.median(z)+300] = 0
+                weights[z > np.median(z)+250] = 0
                 weights = weights.astype(bool)
 
                 z_eq = self.equalize_histogram(z, np.max(z), weights)
@@ -1324,15 +1325,15 @@ class MyApp(Widget):
             json.dump(dict_coordo_labels_manual, positions)
     
         if coordo_xyz:
-            with open(save_pos+'/coordonnees_xyz.csv', 'w', newline='') as csvfile:
+            with open(save_pos+'/coordonnees_xyz_r.csv', 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';')
                 entete = ['image no']
-                for l in dict_coordo_xyz_labels['image1'].keys():
+                for l in dict_coordo_xyz_labels_r['image1'].keys():
                     entete += [f'{l} x', f'{l} y', f'{l} z']
                 writer.writerow(entete)
-                for im, coordos in dict_coordo_xyz_labels.items():
+                for im, coordos in dict_coordo_xyz_labels_r.items():
                     row = [im[5:]]
-                    for l in dict_coordo_xyz_labels['image1'].keys():
+                    for l in dict_coordo_xyz_labels_r['image1'].keys():
                         row += [coordos[l][0], coordos[l][1], coordos[l][2]]
                     writer.writerow(row)
             with open(save_pos+'/positions_xyzr.json', 'w') as positions:

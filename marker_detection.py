@@ -116,7 +116,7 @@ def detect_markers(frame, params=None):
 
     # Filter by Area.
     params.filterByArea = True
-    params.minArea = 80
+    params.minArea = 60
     params.maxArea = 320
     #
     # Filter by Circularity
@@ -135,6 +135,7 @@ def detect_markers(frame, params=None):
 
     detector = cv2.SimpleBlobDetector_create(params)
     key_points = detector.detect(frame)
+    key_points += detector.detect(255-frame) # invert intensity values to detect bright markers
     return key_points
 
 if __name__ == '__main__':

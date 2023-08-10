@@ -1,3 +1,5 @@
+# Result of icp.ipynb experiments and icp registration development
+
 import os
 import cv2
 from tqdm import tqdm

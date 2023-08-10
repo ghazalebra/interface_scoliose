@@ -1,3 +1,5 @@
+# Tests and plots to fins the best interpolation splines
+
 import json
 import math
 import os
@@ -6,7 +8,7 @@ from scipy.interpolate import CubicSpline, interp1d, make_interp_spline, Univari
 
 import matplotlib.pyplot as plt
 
-path = r'C:\Users\ledro\StageE23\Data\Ete_2022\Participant06\autocorrection\Prise02'
+path = r'D:\StageE23\Data\Ete_2022\Participant06\autocorrection\Prise02'
 
 jsonfile = open(path+'/Positions/positions_corrigees.json')
 dict_coordo_labels = json.load(jsonfile)
